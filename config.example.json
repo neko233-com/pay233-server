@@ -1,0 +1,18 @@
+{
+  "http": {
+    "addr": ":8080"
+  },
+  "api": {
+    "signing_secret": "dev-secret"
+  },
+  "channels": [
+    {
+      "name": "mock",
+      "provider": "mock",
+      "enabled": true,
+      "options": {
+        "pay_url_base": "https://pay233.local/mock/pay"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+.git
+.github
+.tmp
+dist
+coverage.out
+*.log
+*.exe
