@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>pay233 Admin</title>
+  <title>pay233 后台管理</title>
   <link rel="stylesheet" href="/admin/static/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
@@ -34,22 +34,12 @@
           <p>统一监控微信、支付宝、第三方、Google Pay、Apple iOS Pay 等渠道。</p>
         </div>
         <div class="userbar">
-          <span id="adminName">未登录</span>
+          <span id="adminName">root</span>
           <button id="logoutBtn" class="ghost">退出</button>
         </div>
       </header>
 
-      <section id="loginPanel" class="login-panel">
-        <form id="loginForm" class="login-box">
-          <h2>管理员登录</h2>
-          <label>账号<input name="username" value="root" autocomplete="username"></label>
-          <label>密码<input name="password" value="root" type="password" autocomplete="current-password"></label>
-          <button type="submit">登录后台</button>
-          <p id="loginError"></p>
-        </form>
-      </section>
-
-      <section id="dashboardPanel" class="dashboard hidden">
+      <section class="dashboard">
         <div class="kpis">
           <article><span>GMV</span><strong id="kpiGmv">0</strong><small>CNY 分</small></article>
           <article><span>成功率</span><strong id="kpiSuccess">0%</strong><small>支付成功 / 总订单</small></article>
@@ -115,6 +105,6 @@
       </section>
     </main>
   </div>
-  <script src="/admin/static/app.js"></script>
+  <script src="/admin/static/dashboard.js"></script>
 </body>
 </html>

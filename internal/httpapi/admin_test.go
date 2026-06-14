@@ -20,6 +20,24 @@ func TestAdminRequiresLogin(t *testing.T) {
 	}
 }
 
+func TestAdminHTMLRouting(t *testing.T) {
+	handler := testServer().Routes()
+
+	rootReq := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rootRec := httptest.NewRecorder()
+	handler.ServeHTTP(rootRec, rootReq)
+	if rootRec.Code != http.StatusFound || rootRec.Header().Get("Location") != "/admin/login.html" {
+		t.Fatalf("expected /admin redirect to login, got %d %q", rootRec.Code, rootRec.Header().Get("Location"))
+	}
+
+	dashboardReq := httptest.NewRequest(http.MethodGet, "/admin/dashboard.html", nil)
+	dashboardRec := httptest.NewRecorder()
+	handler.ServeHTTP(dashboardRec, dashboardReq)
+	if dashboardRec.Code != http.StatusFound || dashboardRec.Header().Get("Location") != "/admin/login.html" {
+		t.Fatalf("expected dashboard redirect to login, got %d %q", dashboardRec.Code, dashboardRec.Header().Get("Location"))
+	}
+}
+
 func TestAdminLoginAndDashboard(t *testing.T) {
 	handler := testServer().Routes()
 	loginReq := httptest.NewRequest(http.MethodPost, "/admin/login", bytes.NewReader([]byte(`{"username":"root","password":"root"}`)))
@@ -33,6 +51,14 @@ func TestAdminLoginAndDashboard(t *testing.T) {
 	cookies := loginRec.Result().Cookies()
 	if len(cookies) == 0 {
 		t.Fatal("expected admin cookie")
+	}
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/admin/dashboard.html", nil)
+	pageReq.AddCookie(cookies[0])
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("expected dashboard page 200, got %d", pageRec.Code)
 	}
 
 	dashboardReq := httptest.NewRequest(http.MethodGet, "/admin/api/dashboard", nil)

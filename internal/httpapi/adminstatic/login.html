@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pay233 登录</title>
+  <link rel="stylesheet" href="/admin/static/styles.css">
+</head>
+<body class="login-page">
+  <main class="login-screen">
+    <section class="login-hero">
+      <div class="brand large">
+        <span class="brand-mark">P</span>
+        <div>
+          <strong>pay233</strong>
+          <small>统一支付中心</small>
+        </div>
+      </div>
+      <h1>管理员登录</h1>
+      <p>登录后查看支付大盘、回调异常、疑似丢单和渠道健康。</p>
+    </section>
+    <form id="loginForm" class="login-box">
+      <h2>登录后台</h2>
+      <label>账号<input name="username" value="root" autocomplete="username"></label>
+      <label>密码<input name="password" value="root" type="password" autocomplete="current-password"></label>
+      <button type="submit">登录</button>
+      <p id="loginError"></p>
+    </form>
+  </main>
+  <script src="/admin/static/login.js"></script>
+</body>
+</html>

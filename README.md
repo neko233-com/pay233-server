@@ -61,6 +61,8 @@ go vet ./...
 - `POST /v1/payments/{id}/close`
 - `POST /v1/webhooks/{channel}`
 - `GET /admin`
+- `GET /admin/login.html`
+- `GET /admin/dashboard.html`
 
 Default admin credentials are `root` / `root`. Change them in config before production use.
 

@@ -1,10 +1,5 @@
-const loginPanel = document.querySelector("#loginPanel");
-const dashboardPanel = document.querySelector("#dashboardPanel");
-const loginForm = document.querySelector("#loginForm");
-const loginError = document.querySelector("#loginError");
 const adminName = document.querySelector("#adminName");
 const logoutBtn = document.querySelector("#logoutBtn");
-
 const charts = {};
 
 async function api(path, options = {}) {
@@ -13,6 +8,10 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
+  if (res.status === 401) {
+    window.location.replace("/admin/login.html");
+    throw new Error("admin login required");
+  }
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -29,12 +28,6 @@ function statusClass(value) {
   if (["paid", "success", "ok"].includes(value)) return "ok";
   if (["failed", "lost"].includes(value)) return "bad";
   return "warn";
-}
-
-function setAuth(loggedIn, username = "root") {
-  loginPanel.classList.toggle("hidden", loggedIn);
-  dashboardPanel.classList.toggle("hidden", !loggedIn);
-  adminName.textContent = loggedIn ? username : "未登录";
 }
 
 async function loadDashboard() {
@@ -139,28 +132,9 @@ function renderAbnormal(rows) {
   `).join("");
 }
 
-loginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  loginError.textContent = "";
-  const form = new FormData(loginForm);
-  try {
-    const me = await api("/admin/login", {
-      method: "POST",
-      body: JSON.stringify({
-        username: form.get("username"),
-        password: form.get("password"),
-      }),
-    });
-    setAuth(true, me.username);
-    await loadDashboard();
-  } catch {
-    loginError.textContent = "账号或密码错误";
-  }
-});
-
 logoutBtn.addEventListener("click", async () => {
   await api("/admin/logout", { method: "POST", body: "{}" }).catch(() => {});
-  setAuth(false);
+  window.location.replace("/admin/login.html");
 });
 
 document.addEventListener("click", async (event) => {
@@ -176,15 +150,11 @@ document.addEventListener("click", async (event) => {
 window.addEventListener("resize", () => Object.values(charts).forEach((c) => c.resize()));
 
 (async function boot() {
-  try {
-    const session = await api("/admin/api/session");
-    if (session.authenticated) {
-      setAuth(true, session.username);
-      await loadDashboard();
-    } else {
-      setAuth(false);
-    }
-  } catch {
-    setAuth(false);
+  const session = await api("/admin/api/session");
+  if (!session.authenticated) {
+    window.location.replace("/admin/login.html");
+    return;
   }
+  adminName.textContent = session.username || "root";
+  await loadDashboard();
 })();

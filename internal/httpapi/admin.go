@@ -18,8 +18,32 @@ var adminFiles embed.FS
 
 const adminCookieName = "pay233_admin"
 
-func (s *Server) adminIndex(w http.ResponseWriter, _ *http.Request) {
-	content, err := adminFiles.ReadFile("adminstatic/index.html")
+func (s *Server) adminIndex(w http.ResponseWriter, r *http.Request) {
+	if s.requestIsAdmin(r) {
+		http.Redirect(w, r, "/admin/dashboard.html", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/admin/login.html", http.StatusFound)
+}
+
+func (s *Server) adminLoginPage(w http.ResponseWriter, r *http.Request) {
+	if s.requestIsAdmin(r) {
+		http.Redirect(w, r, "/admin/dashboard.html", http.StatusFound)
+		return
+	}
+	s.serveAdminHTML(w, "login.html")
+}
+
+func (s *Server) adminDashboardPage(w http.ResponseWriter, r *http.Request) {
+	if !s.requestIsAdmin(r) {
+		http.Redirect(w, r, "/admin/login.html", http.StatusFound)
+		return
+	}
+	s.serveAdminHTML(w, "dashboard.html")
+}
+
+func (s *Server) serveAdminHTML(w http.ResponseWriter, file string) {
+	content, err := adminFiles.ReadFile("adminstatic/" + file)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -132,13 +156,17 @@ func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(adminCookieName)
-		if err != nil || !s.verifyAdminToken(cookie.Value) {
+		if !s.requestIsAdmin(r) {
 			writeError(w, http.StatusUnauthorized, errors.New("admin login required"))
 			return
 		}
 		next(w, r)
 	}
+}
+
+func (s *Server) requestIsAdmin(r *http.Request) bool {
+	cookie, err := r.Cookie(adminCookieName)
+	return err == nil && s.verifyAdminToken(cookie.Value)
 }
 
 func (s *Server) adminToken(username string, expires time.Time) string {

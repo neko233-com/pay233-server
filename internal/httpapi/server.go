@@ -57,6 +57,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/webhooks/{channel}", s.webhook)
 	mux.HandleFunc("GET /admin", s.adminIndex)
 	mux.HandleFunc("GET /admin/", s.adminIndex)
+	mux.HandleFunc("GET /admin/login.html", s.adminLoginPage)
+	mux.HandleFunc("GET /admin/dashboard.html", s.adminDashboardPage)
 	mux.HandleFunc("GET /admin/static/{file}", s.adminStatic)
 	mux.HandleFunc("POST /admin/login", s.adminLogin)
 	mux.HandleFunc("POST /admin/logout", s.adminLogout)
