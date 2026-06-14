@@ -126,6 +126,7 @@ func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
 		s.writePaymentError(w, err)
 		return
 	}
+	s.logPayment("payment_marked_lost", payment)
 	writeJSON(w, http.StatusOK, payment)
 }
 

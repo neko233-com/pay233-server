@@ -13,17 +13,19 @@ import (
 )
 
 type Dependencies struct {
-	Config   config.Config
-	Registry *payment.Registry
-	Store    payment.Store
-	Logger   *slog.Logger
+	Config        config.Config
+	Registry      *payment.Registry
+	Store         payment.Store
+	Logger        *slog.Logger
+	PaymentLogger *slog.Logger
 }
 
 type Server struct {
-	cfg      config.Config
-	service  *payment.Service
-	registry *payment.Registry
-	logger   *slog.Logger
+	cfg           config.Config
+	service       *payment.Service
+	registry      *payment.Registry
+	logger        *slog.Logger
+	paymentLogger *slog.Logger
 }
 
 func NewServer(deps Dependencies) *Server {
@@ -31,11 +33,16 @@ func NewServer(deps Dependencies) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	paymentLogger := deps.PaymentLogger
+	if paymentLogger == nil {
+		paymentLogger = logger
+	}
 	return &Server{
-		cfg:      deps.Config,
-		service:  payment.NewService(deps.Registry, deps.Store),
-		registry: deps.Registry,
-		logger:   logger,
+		cfg:           deps.Config,
+		service:       payment.NewService(deps.Registry, deps.Store),
+		registry:      deps.Registry,
+		logger:        logger,
+		paymentLogger: paymentLogger,
 	}
 }
 
@@ -81,9 +88,11 @@ func (s *Server) createPayment(w http.ResponseWriter, r *http.Request, body []by
 	}
 	created, err := s.service.Create(r.Context(), req)
 	if err != nil {
+		s.logger.Warn("create payment failed", "channel", req.Channel, "out_trade_no", req.OutTradeNo, "error", err)
 		s.writePaymentError(w, err)
 		return
 	}
+	s.logPayment("payment_created", created)
 	writeJSON(w, http.StatusCreated, created)
 }
 
@@ -102,6 +111,7 @@ func (s *Server) closePayment(w http.ResponseWriter, r *http.Request, _ []byte) 
 		s.writePaymentError(w, err)
 		return
 	}
+	s.logPayment("payment_closed", closed)
 	writeJSON(w, http.StatusOK, closed)
 }
 
@@ -117,9 +127,11 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := s.service.ApplyWebhook(r.Context(), r.PathValue("channel"), body, headers)
 	if err != nil {
+		s.logger.Warn("apply payment webhook failed", "channel", r.PathValue("channel"), "error", err)
 		s.writePaymentError(w, err)
 		return
 	}
+	s.logPayment("payment_webhook_applied", updated)
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -159,4 +171,20 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+func (s *Server) logPayment(event string, p payment.Payment) {
+	s.paymentLogger.Info(event,
+		"payment_id", p.ID,
+		"merchant_id", p.MerchantID,
+		"out_trade_no", p.OutTradeNo,
+		"channel", p.Channel,
+		"currency", p.Amount.Currency,
+		"amount", p.Amount.Amount,
+		"status", p.Status,
+		"callback_status", p.CallbackStatus,
+		"callback_attempts", p.CallbackAttempts,
+		"provider_trade", p.ProviderTrade,
+		"failure_reason", p.FailureReason,
+	)
 }

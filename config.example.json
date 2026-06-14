@@ -1,6 +1,6 @@
 {
   "http": {
-    "addr": ":8080"
+    "addr": ":5500"
   },
   "api": {
     "signing_secret": "dev-secret"
@@ -9,6 +9,10 @@
     "username": "root",
     "password": "root",
     "session_secret": "dev-admin-secret"
+  },
+  "logging": {
+    "dir": "logs",
+    "retention_days": 31
   },
   "channels": [
     {

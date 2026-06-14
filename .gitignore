@@ -3,5 +3,6 @@ dist/
 coverage.out
 *.log
 *.exe
+logs/
 output/
 .playwright-cli/

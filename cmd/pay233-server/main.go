@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/neko233-com/pay233-server/internal/config"
 	"github.com/neko233-com/pay233-server/internal/httpapi"
+	"github.com/neko233-com/pay233-server/internal/logging"
 	"github.com/neko233-com/pay233-server/internal/payment"
 )
 
@@ -26,6 +29,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	appLog, paymentLog, closeLogs, err := setupLoggers(cfg)
+	if err != nil {
+		slog.Error("setup logging", "error", err)
+		os.Exit(1)
+	}
+	defer closeLogs()
+	slog.SetDefault(appLog)
+
 	registry := payment.NewRegistry()
 	if err := payment.RegisterConfiguredProviders(registry, cfg.Channels); err != nil {
 		slog.Error("register providers", "error", err)
@@ -34,10 +45,11 @@ func main() {
 
 	store := payment.NewMemoryStore()
 	handler := httpapi.NewServer(httpapi.Dependencies{
-		Config:   cfg,
-		Registry: registry,
-		Store:    store,
-		Logger:   slog.Default(),
+		Config:        cfg,
+		Registry:      registry,
+		Store:         store,
+		Logger:        appLog,
+		PaymentLogger: paymentLog,
 	})
 
 	server := &http.Server{
@@ -70,4 +82,26 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func setupLoggers(cfg config.Config) (*slog.Logger, *slog.Logger, func(), error) {
+	retention := cfg.Logging.RetentionDays
+	appWriter, err := logging.NewDailyWriter(cfg.Logging.Dir, "app", retention)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	paymentWriter, err := logging.NewDailyWriter(filepath.Join(cfg.Logging.Dir, "payments"), "payment", retention)
+	if err != nil {
+		_ = appWriter.Close()
+		return nil, nil, nil, err
+	}
+
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	appLogger := slog.New(slog.NewJSONHandler(io.MultiWriter(os.Stdout, appWriter), opts))
+	paymentLogger := slog.New(slog.NewJSONHandler(paymentWriter, opts))
+	closeLogs := func() {
+		_ = appWriter.Close()
+		_ = paymentWriter.Close()
+	}
+	return appLogger, paymentLogger, closeLogs, nil
 }

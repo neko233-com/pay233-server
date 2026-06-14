@@ -14,6 +14,26 @@ Or run it from the umbrella repository:
 docker compose up --build
 ```
 
+The default listen address is `:5500`.
+
+## Logs
+
+`pay233-server` writes daily rotated JSON logs with 31-day retention by default:
+
+- `logs/app-YYYY-MM-DD.log`: application `slog` output
+- `logs/payments/payment-YYYY-MM-DD.log`: payment audit events such as create, close, webhook, and manual lost-order marking
+
+Configure the directory and retention:
+
+```json
+{
+  "logging": {
+    "dir": "logs",
+    "retention_days": 31
+  }
+}
+```
+
 ## Release
 
 Pushing a tag like `v0.1.0` builds GitHub Release assets:

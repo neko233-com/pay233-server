@@ -11,6 +11,7 @@ type Config struct {
 	HTTP     HTTPConfig      `json:"http"`
 	API      APIConfig       `json:"api"`
 	Admin    AdminConfig     `json:"admin"`
+	Logging  LoggingConfig   `json:"logging"`
 	Channels []ChannelConfig `json:"channels"`
 }
 
@@ -26,6 +27,11 @@ type AdminConfig struct {
 	Username      string `json:"username"`
 	Password      string `json:"password"`
 	SessionSecret string `json:"session_secret"`
+}
+
+type LoggingConfig struct {
+	Dir           string `json:"dir"`
+	RetentionDays int    `json:"retention_days"`
 }
 
 type ChannelConfig struct {
@@ -49,7 +55,7 @@ func Load(path string) (Config, error) {
 	}
 
 	if cfg.HTTP.Addr == "" {
-		cfg.HTTP.Addr = ":8080"
+		cfg.HTTP.Addr = ":5500"
 	}
 	if cfg.Admin.Username == "" {
 		cfg.Admin.Username = "root"
@@ -59,6 +65,12 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Admin.SessionSecret == "" {
 		cfg.Admin.SessionSecret = cfg.API.SigningSecret
+	}
+	if cfg.Logging.Dir == "" {
+		cfg.Logging.Dir = "logs"
+	}
+	if cfg.Logging.RetentionDays <= 0 {
+		cfg.Logging.RetentionDays = 31
 	}
 	for i, channel := range cfg.Channels {
 		if channel.Name == "" {

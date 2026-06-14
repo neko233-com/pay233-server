@@ -16,8 +16,14 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.HTTP.Addr != ":8080" {
+	if cfg.HTTP.Addr != ":5500" {
 		t.Fatalf("expected default addr, got %q", cfg.HTTP.Addr)
+	}
+	if cfg.Logging.Dir != "logs" {
+		t.Fatalf("expected default log dir, got %q", cfg.Logging.Dir)
+	}
+	if cfg.Logging.RetentionDays != 31 {
+		t.Fatalf("expected default log retention, got %d", cfg.Logging.RetentionDays)
 	}
 }
 
