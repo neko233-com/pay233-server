@@ -99,6 +99,34 @@ The admin console supports three roles:
 
 All login, account, payment-operation, callback-retry, and audit-prune actions are written to the append-only audit log. Audit logs are retained for 31 days by default. There is no arbitrary audit deletion API; only `root` can trigger retention pruning for expired entries.
 
+## Channel Health Monitoring
+
+The server checks downstream payment channel health automatically. Default settings:
+
+```json
+{
+  "monitor": {
+    "channel_health_interval_seconds": 60,
+    "channel_health_timeout_seconds": 5
+  }
+}
+```
+
+Each enabled channel can expose a health endpoint through `options.health_url`:
+
+```json
+{
+  "name": "wechat",
+  "provider": "wechat_pay",
+  "enabled": true,
+  "options": {
+    "health_url": "https://api.mch.weixin.qq.com/health"
+  }
+}
+```
+
+The dashboard shows each channel's latest health, latency, last check time, and error. `root` and `admin` can trigger an immediate health check from the dashboard; `employee` can only view the result. Automatic checks write audit records when a channel becomes unhealthy or changes status.
+
 ## Test and Release Environments
 
 `POST /v1/payments` supports `envType` on every request:

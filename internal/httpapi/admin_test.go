@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/neko233-com/pay233-server/internal/config"
 )
 
 func TestAdminRequiresLogin(t *testing.T) {
@@ -146,6 +148,14 @@ func TestRootCreatesUsersAndEmployeeIsReadOnly(t *testing.T) {
 		t.Fatalf("expected employee users 403, got %d: %s", usersRec.Code, usersRec.Body.String())
 	}
 
+	healthReq := httptest.NewRequest(http.MethodPost, "/admin/api/channels/health-check", bytes.NewReader([]byte(`{}`)))
+	healthReq.AddCookie(viewerCookie)
+	healthRec := httptest.NewRecorder()
+	handler.ServeHTTP(healthRec, healthReq)
+	if healthRec.Code != http.StatusForbidden {
+		t.Fatalf("expected employee health-check 403, got %d: %s", healthRec.Code, healthRec.Body.String())
+	}
+
 	opsCookie := loginCookie(t, handler, "ops", "ops-pass")
 	adminMarkReq := httptest.NewRequest(http.MethodPost, "/admin/api/payments/missing/mark-lost", bytes.NewReader([]byte(`{}`)))
 	adminMarkReq.AddCookie(opsCookie)
@@ -193,6 +203,31 @@ func TestAuditLogAndRootPrune(t *testing.T) {
 	handler.ServeHTTP(pruneAsRootRec, pruneAsRoot)
 	if pruneAsRootRec.Code != http.StatusOK {
 		t.Fatalf("expected root prune 200, got %d: %s", pruneAsRootRec.Code, pruneAsRootRec.Body.String())
+	}
+}
+
+func TestAdminChannelHealthCheck(t *testing.T) {
+	handler := testServerWithChannels([]config.ChannelConfig{{
+		Name:     "mock-down",
+		Provider: "mock",
+		Enabled:  true,
+		Options:  map[string]string{"health_status": "down"},
+	}}).Routes()
+	rootCookie := loginCookie(t, handler, "root", "root")
+
+	checkReq := httptest.NewRequest(http.MethodPost, "/admin/api/channels/health-check", bytes.NewReader([]byte(`{}`)))
+	checkReq.AddCookie(rootCookie)
+	checkRec := httptest.NewRecorder()
+	handler.ServeHTTP(checkRec, checkReq)
+	if checkRec.Code != http.StatusOK {
+		t.Fatalf("expected health check 200, got %d: %s", checkRec.Code, checkRec.Body.String())
+	}
+	if !bytes.Contains(checkRec.Body.Bytes(), []byte(`"health":"down"`)) {
+		t.Fatalf("expected down health, got %s", checkRec.Body.String())
+	}
+
+	if !bytes.Contains(checkRec.Body.Bytes(), []byte(`"last_checked_at"`)) {
+		t.Fatalf("expected health metadata, got %s", checkRec.Body.String())
 	}
 }
 

@@ -5,6 +5,7 @@ const envButtons = Array.from(document.querySelectorAll("[data-env]"));
 const userPanel = document.querySelector("#userPanel");
 const userForm = document.querySelector("#userForm");
 const pruneAuditBtn = document.querySelector("#pruneAuditBtn");
+const checkHealthBtn = document.querySelector("#checkHealthBtn");
 const charts = {};
 let currentEnv = new URLSearchParams(window.location.search).get("envType") || "test";
 let currentRole = "employee";
@@ -35,6 +36,11 @@ function statusClass(value) {
   if (["paid", "success", "ok"].includes(value)) return "ok";
   if (["failed", "lost"].includes(value)) return "bad";
   return "warn";
+}
+
+function checkedAt(value) {
+  if (!value) return "未检查";
+  return new Date(value).toLocaleString("zh-CN");
 }
 
 function rowActions(p) {
@@ -125,6 +131,7 @@ function renderHealth(channels) {
       <div>
         <strong>${c.display_name || c.name}</strong>
         <small>${c.name} · ${(c.capabilities || []).slice(0, 3).join(" / ")}</small>
+        <small>检查 ${checkedAt(c.last_checked_at)} · ${c.latency_ms || 0}ms${c.last_error ? ` · ${c.last_error}` : ""}</small>
       </div>
       <span class="status ${statusClass(c.health)}">${c.health}</span>
     </div>
@@ -244,6 +251,11 @@ pruneAuditBtn.addEventListener("click", async () => {
   await loadAudit();
 });
 
+checkHealthBtn.addEventListener("click", async () => {
+  await api("/admin/api/channels/health-check", { method: "POST", body: "{}" });
+  await loadDashboard();
+});
+
 envButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     currentEnv = button.dataset.env;
@@ -267,5 +279,6 @@ window.addEventListener("resize", () => Object.values(charts).forEach((c) => c.r
   adminRole.textContent = currentRole;
   userPanel.classList.toggle("hidden", currentRole !== "root");
   pruneAuditBtn.classList.toggle("hidden", currentRole !== "root");
+  checkHealthBtn.classList.toggle("hidden", !["root", "admin"].includes(currentRole));
   await loadDashboard();
 })();

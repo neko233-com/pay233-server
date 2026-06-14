@@ -135,15 +135,19 @@ type WebhookEvent struct {
 }
 
 type ProviderInfo struct {
-	Name         string   `json:"name"`
-	DisplayName  string   `json:"display_name"`
-	Family       string   `json:"family"`
-	Capabilities []string `json:"capabilities"`
-	Health       string   `json:"health"`
+	Name          string     `json:"name"`
+	DisplayName   string     `json:"display_name"`
+	Family        string     `json:"family"`
+	Capabilities  []string   `json:"capabilities"`
+	Health        string     `json:"health"`
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
+	LatencyMS     int64      `json:"latency_ms,omitempty"`
 }
 
 type Provider interface {
 	Info() ProviderInfo
+	CheckHealth(context.Context) ProviderInfo
 	CreatePayment(context.Context, ProviderCreateRequest) (ProviderCreateResponse, error)
 	ClosePayment(context.Context, Payment) error
 	ParseWebhook(context.Context, []byte, map[string]string) (WebhookEvent, error)

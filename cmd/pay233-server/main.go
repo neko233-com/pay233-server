@@ -79,6 +79,9 @@ func main() {
 		Logger:        appLog,
 		PaymentLogger: paymentLog,
 	})
+	monitorCtx, stopMonitor := context.WithCancel(context.Background())
+	defer stopMonitor()
+	go startChannelHealthMonitor(monitorCtx, cfg, registry, auditStore, appLog)
 
 	server := &http.Server{
 		Addr:              cfg.HTTP.Addr,
@@ -97,11 +100,13 @@ func main() {
 
 	select {
 	case err := <-errs:
+		stopMonitor()
 		if !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server stopped", "error", err)
 			os.Exit(1)
 		}
 	case sig := <-stop:
+		stopMonitor()
 		slog.Info("shutdown requested", "signal", sig.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -132,4 +137,56 @@ func setupLoggers(cfg config.Config) (*slog.Logger, *slog.Logger, func(), error)
 		_ = paymentWriter.Close()
 	}
 	return appLogger, paymentLogger, closeLogs, nil
+}
+
+func startChannelHealthMonitor(ctx context.Context, cfg config.Config, registry *payment.Registry, auditStore *admin.AuditStore, logger *slog.Logger) {
+	interval := time.Duration(cfg.Monitor.ChannelHealthIntervalSeconds) * time.Second
+	timeout := time.Duration(cfg.Monitor.ChannelHealthTimeoutSeconds) * time.Second
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	previous := map[string]string{}
+	for _, info := range registry.ChannelInfos() {
+		previous[info.Name] = info.Health
+	}
+	check := func() {
+		checkCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		infos := registry.CheckAllHealth(checkCtx)
+		for _, info := range infos {
+			old := previous[info.Name]
+			previous[info.Name] = info.Health
+			if info.Health == "ok" && old == info.Health {
+				continue
+			}
+			logger.Warn("channel health check status", "channel", info.Name, "health", info.Health, "previous", old, "error", info.LastError, "latency_ms", info.LatencyMS)
+			if auditStore != nil {
+				_ = auditStore.Write(admin.AuditEntry{
+					Actor:  "system",
+					Role:   admin.RoleRoot,
+					Action: "channel_health_status",
+					Target: info.Name,
+					Details: map[string]string{
+						"previous": old,
+						"health":   info.Health,
+						"error":    info.LastError,
+					},
+				})
+			}
+		}
+	}
+	check()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			check()
+		}
+	}
 }

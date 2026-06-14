@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 )
 
 type ConfiguredProvider struct {
@@ -13,6 +15,8 @@ type ConfiguredProvider struct {
 	display    string
 	family     string
 	payURLBase string
+	healthURL  string
+	healthMode string
 }
 
 type MockProvider = ConfiguredProvider
@@ -32,6 +36,8 @@ func NewConfiguredProvider(provider string, options map[string]string) *Configur
 		display:    info.DisplayName,
 		family:     info.Family,
 		payURLBase: base,
+		healthURL:  options["health_url"],
+		healthMode: options["health_status"],
 	}
 }
 
@@ -43,6 +49,55 @@ func (p *ConfiguredProvider) Info() ProviderInfo {
 		Capabilities: info.Capabilities,
 		Health:       "ok",
 	}
+}
+
+func (p *ConfiguredProvider) CheckHealth(ctx context.Context) ProviderInfo {
+	start := time.Now()
+	info := p.Info()
+	now := start.UTC()
+	info.LastCheckedAt = &now
+	finish := func() ProviderInfo {
+		info.LatencyMS = time.Since(start).Milliseconds()
+		return info
+	}
+	if p.healthMode != "" {
+		switch p.healthMode {
+		case "ok", "degraded", "down":
+			info.Health = p.healthMode
+		default:
+			info.Health = "down"
+			info.LastError = "invalid health_status option"
+		}
+		return finish()
+	}
+	if p.healthURL == "" {
+		info.Health = "ok"
+		return finish()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.healthURL, nil)
+	if err != nil {
+		info.Health = "down"
+		info.LastError = err.Error()
+		return finish()
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		info.Health = "down"
+		info.LastError = err.Error()
+		return finish()
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		info.Health = "ok"
+		return finish()
+	}
+	if resp.StatusCode >= 300 && resp.StatusCode < 500 {
+		info.Health = "degraded"
+	} else {
+		info.Health = "down"
+	}
+	info.LastError = fmt.Sprintf("health endpoint returned %d", resp.StatusCode)
+	return finish()
 }
 
 func (p *ConfiguredProvider) CreatePayment(_ context.Context, req ProviderCreateRequest) (ProviderCreateResponse, error) {

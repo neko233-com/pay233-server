@@ -13,6 +13,7 @@ type Config struct {
 	Admin    AdminConfig     `json:"admin"`
 	Logging  LoggingConfig   `json:"logging"`
 	Storage  StorageConfig   `json:"storage"`
+	Monitor  MonitorConfig   `json:"monitor"`
 	Channels []ChannelConfig `json:"channels"`
 }
 
@@ -40,6 +41,11 @@ type StorageConfig struct {
 	AdminUsersPath     string `json:"admin_users_path"`
 	AuditPath          string `json:"audit_path"`
 	AuditRetentionDays int    `json:"audit_retention_days"`
+}
+
+type MonitorConfig struct {
+	ChannelHealthIntervalSeconds int `json:"channel_health_interval_seconds"`
+	ChannelHealthTimeoutSeconds  int `json:"channel_health_timeout_seconds"`
 }
 
 type ChannelConfig struct {
@@ -91,6 +97,12 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Storage.AuditRetentionDays <= 0 {
 		cfg.Storage.AuditRetentionDays = 31
+	}
+	if cfg.Monitor.ChannelHealthIntervalSeconds <= 0 {
+		cfg.Monitor.ChannelHealthIntervalSeconds = 60
+	}
+	if cfg.Monitor.ChannelHealthTimeoutSeconds <= 0 {
+		cfg.Monitor.ChannelHealthTimeoutSeconds = 5
 	}
 	for i, channel := range cfg.Channels {
 		if channel.Name == "" {

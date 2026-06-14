@@ -265,14 +265,19 @@ func TestChannels(t *testing.T) {
 }
 
 func testServer() *Server {
+	return testServerWithChannels([]config.ChannelConfig{{
+		Name:     "mock",
+		Provider: "mock",
+		Enabled:  true,
+	}})
+}
+
+func testServerWithChannels(channels []config.ChannelConfig) *Server {
 	cfg := config.Config{
-		API:   config.APIConfig{SigningSecret: "secret"},
-		Admin: config.AdminConfig{Username: "root", Password: "root", SessionSecret: "admin-secret"},
-		Channels: []config.ChannelConfig{{
-			Name:     "mock",
-			Provider: "mock",
-			Enabled:  true,
-		}},
+		API:      config.APIConfig{SigningSecret: "secret"},
+		Admin:    config.AdminConfig{Username: "root", Password: "root", SessionSecret: "admin-secret"},
+		Monitor:  config.MonitorConfig{ChannelHealthTimeoutSeconds: 1, ChannelHealthIntervalSeconds: 60},
+		Channels: channels,
 	}
 	registry := payment.NewRegistry()
 	if err := payment.RegisterConfiguredProviders(registry, cfg.Channels); err != nil {

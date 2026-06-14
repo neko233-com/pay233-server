@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"embed"
@@ -209,6 +210,28 @@ func (s *Server) adminRetryCallback(w http.ResponseWriter, r *http.Request) {
 	})
 	s.logPayment("payment_callback_retry_success", updated)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) adminCheckChannelHealth(w http.ResponseWriter, r *http.Request) {
+	timeout := time.Duration(s.cfg.Monitor.ChannelHealthTimeoutSeconds) * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+	before := map[string]string{}
+	for _, info := range s.registry.ChannelInfos() {
+		before[info.Name] = info.Health
+	}
+	infos := s.registry.CheckAllHealth(ctx)
+	actor, _ := s.currentAdmin(r)
+	s.audit(actor.Username, actor.Role, "channel_health_manual_check", "channels", map[string]string{"count": strconv.Itoa(len(infos))})
+	for _, info := range infos {
+		if info.Health != "ok" || before[info.Name] != info.Health {
+			s.audit(actor.Username, actor.Role, "channel_health_status", info.Name, map[string]string{
+				"health": info.Health,
+				"error":  info.LastError,
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"channels": infos})
 }
 
 func (s *Server) adminUsers(w http.ResponseWriter, _ *http.Request) {

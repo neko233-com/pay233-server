@@ -37,6 +37,12 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Storage.AuditRetentionDays != 31 {
 		t.Fatalf("expected default audit retention, got %d", cfg.Storage.AuditRetentionDays)
 	}
+	if cfg.Monitor.ChannelHealthIntervalSeconds != 60 {
+		t.Fatalf("expected default health interval, got %d", cfg.Monitor.ChannelHealthIntervalSeconds)
+	}
+	if cfg.Monitor.ChannelHealthTimeoutSeconds != 5 {
+		t.Fatalf("expected default health timeout, got %d", cfg.Monitor.ChannelHealthTimeoutSeconds)
+	}
 }
 
 func TestLoadValidatesChannel(t *testing.T) {

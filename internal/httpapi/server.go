@@ -87,6 +87,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/api/payments", s.withAdmin(s.adminPayments))
 	mux.HandleFunc("POST /admin/api/payments/{id}/mark-lost", s.withRoles(s.adminMarkLost, adminstore.RoleRoot, adminstore.RoleAdmin))
 	mux.HandleFunc("POST /admin/api/payments/{id}/retry-callback", s.withRoles(s.adminRetryCallback, adminstore.RoleRoot, adminstore.RoleAdmin))
+	mux.HandleFunc("POST /admin/api/channels/health-check", s.withRoles(s.adminCheckChannelHealth, adminstore.RoleRoot, adminstore.RoleAdmin))
 	mux.HandleFunc("GET /admin/api/users", s.withRoles(s.adminUsers, adminstore.RoleRoot))
 	mux.HandleFunc("POST /admin/api/users", s.withRoles(s.adminCreateUser, adminstore.RoleRoot))
 	mux.HandleFunc("DELETE /admin/api/users/{username}", s.withRoles(s.adminDeleteUser, adminstore.RoleRoot))
