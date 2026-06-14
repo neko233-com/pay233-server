@@ -1,8 +1,13 @@
 const adminName = document.querySelector("#adminName");
+const adminRole = document.querySelector("#adminRole");
 const logoutBtn = document.querySelector("#logoutBtn");
 const envButtons = Array.from(document.querySelectorAll("[data-env]"));
+const userPanel = document.querySelector("#userPanel");
+const userForm = document.querySelector("#userForm");
+const pruneAuditBtn = document.querySelector("#pruneAuditBtn");
 const charts = {};
 let currentEnv = new URLSearchParams(window.location.search).get("envType") || "test";
+let currentRole = "employee";
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -33,6 +38,7 @@ function statusClass(value) {
 }
 
 function rowActions(p) {
+  if (!["root", "admin"].includes(currentRole)) return "-";
   const retry = p.notify_url && p.callback_status !== "success"
     ? `<button class="ghost" data-retry="${p.id}">重试回调</button>`
     : "";
@@ -54,6 +60,8 @@ async function loadDashboard() {
   renderFailures(data.failures || []);
   renderHealth(data.channel_info || []);
   renderAbnormal(data.abnormal || []);
+  await loadAudit();
+  if (currentRole === "root") await loadUsers();
 }
 
 function chart(id) {
@@ -150,6 +158,38 @@ function syncEnvButtons() {
   });
 }
 
+async function loadUsers() {
+  const data = await api("/admin/api/users");
+  const tbody = document.querySelector("#userRows");
+  const users = data.users || [];
+  tbody.innerHTML = users.map((u) => `
+    <tr>
+      <td>${u.username}</td>
+      <td><span class="status ${u.role === "root" ? "bad" : u.role === "admin" ? "warn" : "ok"}">${u.role}</span></td>
+      <td>${u.created_by || "-"}</td>
+      <td>${u.role === "root" ? "-" : `<button class="ghost" data-delete-user="${u.username}">删除</button>`}</td>
+    </tr>
+  `).join("");
+}
+
+async function loadAudit() {
+  const data = await api("/admin/api/audit?limit=50");
+  const tbody = document.querySelector("#auditRows");
+  const entries = data.entries || [];
+  if (entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4">暂无操作日志</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = entries.map((entry) => `
+    <tr>
+      <td>${new Date(entry.created_at).toLocaleString("zh-CN")}</td>
+      <td>${entry.actor}<br><small>${entry.role || "-"}</small></td>
+      <td>${entry.action}</td>
+      <td>${entry.target || "-"}</td>
+    </tr>
+  `).join("");
+}
+
 logoutBtn.addEventListener("click", async () => {
   await api("/admin/logout", { method: "POST", body: "{}" }).catch(() => {});
   window.location.replace("/admin/login.html");
@@ -175,6 +215,35 @@ document.addEventListener("click", async (event) => {
   await loadDashboard();
 });
 
+document.addEventListener("click", async (event) => {
+  const username = event.target && event.target.dataset && event.target.dataset.deleteUser;
+  if (!username) return;
+  await api(`/admin/api/users/${encodeURIComponent(username)}`, { method: "DELETE" });
+  await loadUsers();
+  await loadAudit();
+});
+
+userForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(userForm);
+  await api("/admin/api/users", {
+    method: "POST",
+    body: JSON.stringify({
+      username: String(form.get("username") || "").trim(),
+      password: String(form.get("password") || ""),
+      role: String(form.get("role") || "employee"),
+    }),
+  });
+  userForm.reset();
+  await loadUsers();
+  await loadAudit();
+});
+
+pruneAuditBtn.addEventListener("click", async () => {
+  await api("/admin/api/audit/prune", { method: "POST", body: "{}" });
+  await loadAudit();
+});
+
 envButtons.forEach((button) => {
   button.addEventListener("click", async () => {
     currentEnv = button.dataset.env;
@@ -193,6 +262,10 @@ window.addEventListener("resize", () => Object.values(charts).forEach((c) => c.r
     window.location.replace("/admin/login.html");
     return;
   }
+  currentRole = session.role || "employee";
   adminName.textContent = session.username || "root";
+  adminRole.textContent = currentRole;
+  userPanel.classList.toggle("hidden", currentRole !== "root");
+  pruneAuditBtn.classList.toggle("hidden", currentRole !== "root");
   await loadDashboard();
 })();

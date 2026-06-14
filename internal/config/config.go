@@ -36,7 +36,10 @@ type LoggingConfig struct {
 }
 
 type StorageConfig struct {
-	PaymentsPath string `json:"payments_path"`
+	PaymentsPath       string `json:"payments_path"`
+	AdminUsersPath     string `json:"admin_users_path"`
+	AuditPath          string `json:"audit_path"`
+	AuditRetentionDays int    `json:"audit_retention_days"`
 }
 
 type ChannelConfig struct {
@@ -79,6 +82,15 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Storage.PaymentsPath == "" {
 		cfg.Storage.PaymentsPath = "data/payments.jsonl"
+	}
+	if cfg.Storage.AdminUsersPath == "" {
+		cfg.Storage.AdminUsersPath = "data/admin-users.json"
+	}
+	if cfg.Storage.AuditPath == "" {
+		cfg.Storage.AuditPath = "data/audit.jsonl"
+	}
+	if cfg.Storage.AuditRetentionDays <= 0 {
+		cfg.Storage.AuditRetentionDays = 31
 	}
 	for i, channel := range cfg.Channels {
 		if channel.Name == "" {

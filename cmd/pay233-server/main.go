@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/neko233-com/pay233-server/internal/admin"
 	"github.com/neko233-com/pay233-server/internal/config"
 	"github.com/neko233-com/pay233-server/internal/httpapi"
 	"github.com/neko233-com/pay233-server/internal/logging"
@@ -53,10 +54,28 @@ func main() {
 			slog.Error("close payment store", "error", err)
 		}
 	}()
+	userStore, err := admin.NewUserStore(cfg.Storage.AdminUsersPath, cfg.Admin.Username, cfg.Admin.Password)
+	if err != nil {
+		slog.Error("open admin user store", "path", cfg.Storage.AdminUsersPath, "error", err)
+		os.Exit(1)
+	}
+	auditStore, err := admin.NewAuditStore(cfg.Storage.AuditPath, cfg.Storage.AuditRetentionDays)
+	if err != nil {
+		slog.Error("open audit store", "path", cfg.Storage.AuditPath, "error", err)
+		os.Exit(1)
+	}
+	if removed, err := auditStore.PruneExpired(time.Now().UTC()); err != nil {
+		slog.Error("prune audit log", "error", err)
+		os.Exit(1)
+	} else if removed > 0 {
+		slog.Info("pruned expired audit logs", "removed", removed)
+	}
 	handler := httpapi.NewServer(httpapi.Dependencies{
 		Config:        cfg,
 		Registry:      registry,
 		Store:         store,
+		UserStore:     userStore,
+		AuditStore:    auditStore,
 		Logger:        appLog,
 		PaymentLogger: paymentLog,
 	})

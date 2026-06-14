@@ -96,6 +96,14 @@ h1 { margin: 0; font-size: 26px; line-height: 1.2; }
   background: #e8f2ff;
   color: var(--blue);
 }
+.role-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 8px;
+}
 button {
   border: 0;
   border-radius: 8px;
@@ -228,6 +236,24 @@ th, td { text-align: left; border-bottom: 1px solid var(--border); padding: 11px
 th { color: var(--muted); font-size: 12px; font-weight: 700; }
 .row-actions { display: inline-flex; gap: 8px; align-items: center; }
 .row-actions button { padding: 7px 10px; }
+.bottom-grid { margin-top: 12px; }
+.user-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.user-form input, .user-form select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  height: 38px;
+  padding: 0 10px;
+}
+.user-form button { width: 100%; }
+.audit-actions { margin-bottom: 10px; }
+.compact table { font-size: 12px; }
+td small { color: var(--muted); }
 
 @media (max-width: 960px) {
   .app-shell { grid-template-columns: 1fr; }
@@ -236,6 +262,7 @@ th { color: var(--muted); font-size: 12px; font-weight: 700; }
   .userbar { flex-wrap: wrap; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid { grid-template-columns: 1fr; }
+  .user-form { grid-template-columns: 1fr; }
   .login-screen {
     grid-template-columns: 1fr;
     padding: 28px;

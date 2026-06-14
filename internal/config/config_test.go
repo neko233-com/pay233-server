@@ -28,6 +28,15 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Storage.PaymentsPath != "data/payments.jsonl" {
 		t.Fatalf("expected default payment store, got %q", cfg.Storage.PaymentsPath)
 	}
+	if cfg.Storage.AdminUsersPath != "data/admin-users.json" {
+		t.Fatalf("expected default admin user store, got %q", cfg.Storage.AdminUsersPath)
+	}
+	if cfg.Storage.AuditPath != "data/audit.jsonl" {
+		t.Fatalf("expected default audit store, got %q", cfg.Storage.AuditPath)
+	}
+	if cfg.Storage.AuditRetentionDays != 31 {
+		t.Fatalf("expected default audit retention, got %d", cfg.Storage.AuditRetentionDays)
+	}
 }
 
 func TestLoadValidatesChannel(t *testing.T) {

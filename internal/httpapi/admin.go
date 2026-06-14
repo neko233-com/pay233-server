@@ -9,9 +9,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	adminstore "github.com/neko233-com/pay233-server/internal/admin"
 	"github.com/neko233-com/pay233-server/internal/payment"
 )
 
@@ -90,7 +92,9 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if req.Username != s.cfg.Admin.Username || req.Password != s.cfg.Admin.Password {
+	user, ok := s.userStore.Authenticate(req.Username, req.Password)
+	if !ok {
+		s.audit(req.Username, "", "admin_login_failed", "admin", nil)
 		writeError(w, http.StatusUnauthorized, errors.New("invalid admin credentials"))
 		return
 	}
@@ -103,10 +107,14 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	writeJSON(w, http.StatusOK, map[string]string{"username": req.Username})
+	s.audit(user.Username, user.Role, "admin_login_success", "admin", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"username": user.Username, "role": user.Role})
 }
 
-func (s *Server) adminLogout(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) adminLogout(w http.ResponseWriter, r *http.Request) {
+	if user, ok := s.currentAdmin(r); ok {
+		s.audit(user.Username, user.Role, "admin_logout", "admin", nil)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     adminCookieName,
 		Value:    "",
@@ -119,16 +127,17 @@ func (s *Server) adminLogout(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) adminSession(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(adminCookieName)
-	if err != nil || !s.verifyAdminToken(cookie.Value) {
+	user, ok := s.currentAdmin(r)
+	if !ok {
 		writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "username": s.cfg.Admin.Username})
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": true, "username": user.Username, "role": user.Role})
 }
 
-func (s *Server) adminMe(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"username": s.cfg.Admin.Username})
+func (s *Server) adminMe(w http.ResponseWriter, r *http.Request) {
+	user, _ := s.currentAdmin(r)
+	writeJSON(w, http.StatusOK, user.Public())
 }
 
 func (s *Server) adminDashboard(w http.ResponseWriter, r *http.Request) {
@@ -162,6 +171,12 @@ func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
 		s.writePaymentError(w, err)
 		return
 	}
+	actor, _ := s.currentAdmin(r)
+	s.audit(actor.Username, actor.Role, "payment_mark_lost", payment.ID, map[string]string{
+		"out_trade_no": payment.OutTradeNo,
+		"env_type":     string(payment.EnvType),
+		"reason":       payment.FailureReason,
+	})
 	s.logPayment("payment_marked_lost", payment)
 	writeJSON(w, http.StatusOK, payment)
 }
@@ -180,11 +195,72 @@ func (s *Server) adminRetryCallback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.logger.Warn("manual merchant callback retry failed", "payment_id", payment.ID, "error", err)
 		s.logPayment("payment_callback_retry_failed", updated)
+		actor, _ := s.currentAdmin(r)
+		s.audit(actor.Username, actor.Role, "payment_callback_retry_failed", payment.ID, map[string]string{
+			"out_trade_no": payment.OutTradeNo,
+			"error":        err.Error(),
+		})
 		writeJSON(w, http.StatusOK, updated)
 		return
 	}
+	actor, _ := s.currentAdmin(r)
+	s.audit(actor.Username, actor.Role, "payment_callback_retry_success", payment.ID, map[string]string{
+		"out_trade_no": payment.OutTradeNo,
+	})
 	s.logPayment("payment_callback_retry_success", updated)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) adminUsers(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"users": s.userStore.List()})
+}
+
+func (s *Server) adminCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req adminstore.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	actor, _ := s.currentAdmin(r)
+	user, err := s.userStore.Create(actor.Username, req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	s.audit(actor.Username, actor.Role, "admin_user_created", user.Username, map[string]string{"role": string(user.Role)})
+	writeJSON(w, http.StatusCreated, user)
+}
+
+func (s *Server) adminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	username := r.PathValue("username")
+	if err := s.userStore.Delete(username); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	actor, _ := s.currentAdmin(r)
+	s.audit(actor.Username, actor.Role, "admin_user_deleted", username, nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) adminAudit(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			limit = parsed
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": s.auditStore.List(limit)})
+}
+
+func (s *Server) adminPruneAudit(w http.ResponseWriter, r *http.Request) {
+	removed, err := s.auditStore.PruneExpired(time.Now().UTC())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	actor, _ := s.currentAdmin(r)
+	s.audit(actor.Username, actor.Role, "audit_pruned", "audit", map[string]string{"removed": strconv.Itoa(removed)})
+	writeJSON(w, http.StatusOK, map[string]any{"removed": removed})
 }
 
 func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {
@@ -197,9 +273,28 @@ func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (s *Server) withRoles(next http.HandlerFunc, roles ...adminstore.Role) http.HandlerFunc {
+	allowed := make(map[adminstore.Role]struct{}, len(roles))
+	for _, role := range roles {
+		allowed[role] = struct{}{}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := s.currentAdmin(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, errors.New("admin login required"))
+			return
+		}
+		if _, ok := allowed[user.Role]; !ok {
+			writeError(w, http.StatusForbidden, errors.New("insufficient admin role"))
+			return
+		}
+		next(w, r)
+	}
+}
+
 func (s *Server) requestIsAdmin(r *http.Request) bool {
-	cookie, err := r.Cookie(adminCookieName)
-	return err == nil && s.verifyAdminToken(cookie.Value)
+	_, ok := s.currentAdmin(r)
+	return ok
 }
 
 func (s *Server) adminToken(username string, expires time.Time) string {
@@ -209,17 +304,29 @@ func (s *Server) adminToken(username string, expires time.Time) string {
 	return payload + "|" + hex.EncodeToString(mac.Sum(nil))
 }
 
-func (s *Server) verifyAdminToken(token string) bool {
+func (s *Server) currentAdmin(r *http.Request) (adminstore.User, bool) {
+	cookie, err := r.Cookie(adminCookieName)
+	if err != nil {
+		return adminstore.User{}, false
+	}
+	username, ok := s.verifyAdminToken(cookie.Value)
+	if !ok {
+		return adminstore.User{}, false
+	}
+	return s.userStore.Get(username)
+}
+
+func (s *Server) verifyAdminToken(token string) (string, bool) {
 	parts := strings.Split(token, "|")
 	if len(parts) != 3 {
-		return false
+		return "", false
 	}
 	expires, err := time.Parse(time.RFC3339, parts[1])
 	if err != nil || time.Now().UTC().After(expires) {
-		return false
+		return "", false
 	}
 	expected := s.adminToken(parts[0], expires)
-	return hmac.Equal([]byte(expected), []byte(token))
+	return parts[0], hmac.Equal([]byte(expected), []byte(token))
 }
 
 func (s *Server) adminSecret() string {
@@ -230,6 +337,24 @@ func (s *Server) adminSecret() string {
 		return s.cfg.API.SigningSecret
 	}
 	return "pay233-dev-admin-secret"
+}
+
+func (s *Server) audit(actor string, role adminstore.Role, action string, target string, details map[string]string) {
+	if s.auditStore == nil {
+		return
+	}
+	if actor == "" {
+		actor = "anonymous"
+	}
+	if err := s.auditStore.Write(adminstore.AuditEntry{
+		Actor:   actor,
+		Role:    role,
+		Action:  action,
+		Target:  target,
+		Details: details,
+	}); err != nil {
+		s.logger.Warn("write audit log failed", "actor", actor, "action", action, "error", err)
+	}
 }
 
 func listFilterFromRequest(r *http.Request) (payment.ListFilter, error) {

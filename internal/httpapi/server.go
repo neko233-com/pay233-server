@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	adminstore "github.com/neko233-com/pay233-server/internal/admin"
 	"github.com/neko233-com/pay233-server/internal/config"
 	"github.com/neko233-com/pay233-server/internal/payment"
 )
@@ -20,6 +21,8 @@ type Dependencies struct {
 	Config        config.Config
 	Registry      *payment.Registry
 	Store         payment.Store
+	UserStore     *adminstore.UserStore
+	AuditStore    *adminstore.AuditStore
 	Logger        *slog.Logger
 	PaymentLogger *slog.Logger
 }
@@ -28,6 +31,8 @@ type Server struct {
 	cfg           config.Config
 	service       *payment.Service
 	registry      *payment.Registry
+	userStore     *adminstore.UserStore
+	auditStore    *adminstore.AuditStore
 	logger        *slog.Logger
 	paymentLogger *slog.Logger
 }
@@ -41,10 +46,20 @@ func NewServer(deps Dependencies) *Server {
 	if paymentLogger == nil {
 		paymentLogger = logger
 	}
+	userStore := deps.UserStore
+	if userStore == nil {
+		userStore = adminstore.NewMemoryUserStore(deps.Config.Admin.Username, deps.Config.Admin.Password)
+	}
+	auditStore := deps.AuditStore
+	if auditStore == nil {
+		auditStore = adminstore.NewMemoryAuditStore(deps.Config.Storage.AuditRetentionDays)
+	}
 	return &Server{
 		cfg:           deps.Config,
 		service:       payment.NewService(deps.Registry, deps.Store),
 		registry:      deps.Registry,
+		userStore:     userStore,
+		auditStore:    auditStore,
 		logger:        logger,
 		paymentLogger: paymentLogger,
 	}
@@ -70,8 +85,13 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/api/me", s.withAdmin(s.adminMe))
 	mux.HandleFunc("GET /admin/api/dashboard", s.withAdmin(s.adminDashboard))
 	mux.HandleFunc("GET /admin/api/payments", s.withAdmin(s.adminPayments))
-	mux.HandleFunc("POST /admin/api/payments/{id}/mark-lost", s.withAdmin(s.adminMarkLost))
-	mux.HandleFunc("POST /admin/api/payments/{id}/retry-callback", s.withAdmin(s.adminRetryCallback))
+	mux.HandleFunc("POST /admin/api/payments/{id}/mark-lost", s.withRoles(s.adminMarkLost, adminstore.RoleRoot, adminstore.RoleAdmin))
+	mux.HandleFunc("POST /admin/api/payments/{id}/retry-callback", s.withRoles(s.adminRetryCallback, adminstore.RoleRoot, adminstore.RoleAdmin))
+	mux.HandleFunc("GET /admin/api/users", s.withRoles(s.adminUsers, adminstore.RoleRoot))
+	mux.HandleFunc("POST /admin/api/users", s.withRoles(s.adminCreateUser, adminstore.RoleRoot))
+	mux.HandleFunc("DELETE /admin/api/users/{username}", s.withRoles(s.adminDeleteUser, adminstore.RoleRoot))
+	mux.HandleFunc("GET /admin/api/audit", s.withAdmin(s.adminAudit))
+	mux.HandleFunc("POST /admin/api/audit/prune", s.withRoles(s.adminPruneAudit, adminstore.RoleRoot))
 	return mux
 }
 

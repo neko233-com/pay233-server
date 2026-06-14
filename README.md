@@ -36,17 +36,20 @@ Configure the directory and retention:
 
 ## Storage
 
-Payments are persisted to an append-only JSONL file by default:
+Payments, admin users, and audit logs are persisted by default:
 
 ```json
 {
   "storage": {
-    "payments_path": "data/payments.jsonl"
+    "payments_path": "data/payments.jsonl",
+    "admin_users_path": "data/admin-users.json",
+    "audit_path": "data/audit.jsonl",
+    "audit_retention_days": 31
   }
 }
 ```
 
-The server replays this file on startup, so orders survive process restarts. Back up this file together with daily payment logs. For larger deployments, keep the `payment.Store` interface and replace the file store with PostgreSQL, MySQL, or another transactional backend.
+The server replays payment and audit files on startup, so orders and operation history survive process restarts. Back up these files together with daily payment logs. For larger deployments, keep the store interfaces and replace the file stores with PostgreSQL, MySQL, or another transactional backend.
 
 ## Release
 
@@ -85,6 +88,16 @@ make verify
 - `GET /admin/dashboard.html`
 
 Default admin credentials are `root` / `root`. Change them in config before production use.
+
+## Admin Roles and Audit Logs
+
+The admin console supports three roles:
+
+- `root`: full access, can create/delete `admin` and `employee` accounts, and can prune expired audit logs.
+- `admin`: can operate payments, mark lost orders, and retry merchant callbacks.
+- `employee`: read-only access to dashboards, payment lists, and audit logs.
+
+All login, account, payment-operation, callback-retry, and audit-prune actions are written to the append-only audit log. Audit logs are retained for 31 days by default. There is no arbitrary audit deletion API; only `root` can trigger retention pruning for expired entries.
 
 ## Test and Release Environments
 

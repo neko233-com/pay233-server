@@ -15,7 +15,10 @@
     "retention_days": 31
   },
   "storage": {
-    "payments_path": "data/payments.jsonl"
+    "payments_path": "data/payments.jsonl",
+    "admin_users_path": "data/admin-users.json",
+    "audit_path": "data/audit.jsonl",
+    "audit_retention_days": 31
   },
   "channels": [
     {
