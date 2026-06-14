@@ -29,6 +29,35 @@ func TestServiceCreatePayment(t *testing.T) {
 	}
 }
 
+func TestServiceDashboardTracksAbnormalPayments(t *testing.T) {
+	service := testService()
+	created, err := service.Create(context.Background(), CreatePaymentRequest{
+		MerchantID: "m1",
+		OutTradeNo: "o1",
+		Channel:    "mock",
+		Amount:     Money{Currency: "CNY", Amount: 100},
+		Subject:    "test",
+		NotifyURL:  "https://merchant.test/notify",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.CallbackStatus != CallbackPending {
+		t.Fatalf("expected callback pending, got %s", created.CallbackStatus)
+	}
+
+	dashboard := service.Dashboard()
+	if dashboard.KPIs.TotalPayments != 1 {
+		t.Fatalf("expected one payment, got %d", dashboard.KPIs.TotalPayments)
+	}
+	if len(dashboard.Abnormal) != 1 {
+		t.Fatalf("expected abnormal payment, got %d", len(dashboard.Abnormal))
+	}
+	if len(dashboard.ChannelInfo) == 0 {
+		t.Fatal("expected channel info")
+	}
+}
+
 func TestServiceRejectsUnknownChannel(t *testing.T) {
 	service := testService()
 

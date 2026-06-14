@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
+	"time"
 )
 
 type Service struct {
@@ -26,15 +28,16 @@ func (s *Service) Create(ctx context.Context, req CreatePaymentRequest) (Payment
 	}
 
 	payment := Payment{
-		ID:         newID("pay"),
-		MerchantID: req.MerchantID,
-		OutTradeNo: req.OutTradeNo,
-		Channel:    req.Channel,
-		Amount:     req.Amount,
-		Subject:    req.Subject,
-		NotifyURL:  req.NotifyURL,
-		Status:     StatusCreated,
-		Metadata:   req.Metadata,
+		ID:             newID("pay"),
+		MerchantID:     req.MerchantID,
+		OutTradeNo:     req.OutTradeNo,
+		Channel:        req.Channel,
+		Amount:         req.Amount,
+		Subject:        req.Subject,
+		NotifyURL:      req.NotifyURL,
+		Status:         StatusCreated,
+		CallbackStatus: CallbackNone,
+		Metadata:       req.Metadata,
 	}
 
 	created, err := s.store.Create(payment)
@@ -57,6 +60,9 @@ func (s *Service) Create(ctx context.Context, req CreatePaymentRequest) (Payment
 	created.Status = providerResp.Status
 	if created.Status == "" {
 		created.Status = StatusPending
+	}
+	if created.NotifyURL != "" {
+		created.CallbackStatus = CallbackPending
 	}
 	return s.store.Update(created)
 }
@@ -106,7 +112,157 @@ func (s *Service) ApplyWebhook(ctx context.Context, channel string, raw []byte, 
 	}
 	payment.ProviderTrade = event.ProviderTrade
 	payment.Status = event.Status
+	now := time.Now().UTC()
+	payment.LastCallbackAt = &now
+	payment.CallbackAttempts++
+	payment.CallbackError = ""
+	if event.Status == StatusPaid {
+		payment.CallbackStatus = CallbackSuccess
+	} else if event.Status == StatusFailed {
+		payment.CallbackStatus = CallbackFailed
+		payment.FailureReason = "provider reported failure"
+	}
 	return s.store.Update(payment)
+}
+
+func (s *Service) List() []Payment {
+	payments := s.store.List()
+	sort.Slice(payments, func(i, j int) bool {
+		return payments[i].UpdatedAt.After(payments[j].UpdatedAt)
+	})
+	return payments
+}
+
+func (s *Service) MarkLost(id string, reason string) (Payment, error) {
+	payment, err := s.Get(id)
+	if err != nil {
+		return Payment{}, err
+	}
+	payment.Status = StatusLost
+	payment.CallbackStatus = CallbackLost
+	payment.FailureReason = reason
+	if payment.FailureReason == "" {
+		payment.FailureReason = "manual reconciliation marked lost"
+	}
+	return s.store.Update(payment)
+}
+
+type Dashboard struct {
+	KPIs        DashboardKPIs   `json:"kpis"`
+	Series      []DailyMetric   `json:"series"`
+	Channels    []ChannelMetric `json:"channels"`
+	Failures    []ReasonMetric  `json:"failures"`
+	Abnormal    []Payment       `json:"abnormal"`
+	ChannelInfo []ProviderInfo  `json:"channel_info"`
+}
+
+type DashboardKPIs struct {
+	GMV              int64   `json:"gmv"`
+	TotalPayments    int     `json:"total_payments"`
+	SuccessRate      float64 `json:"success_rate"`
+	CallbackFailures int     `json:"callback_failures"`
+	LostOrders       int     `json:"lost_orders"`
+	UnsettledAmount  int64   `json:"unsettled_amount"`
+}
+
+type DailyMetric struct {
+	Date        string  `json:"date"`
+	Amount      int64   `json:"amount"`
+	SuccessRate float64 `json:"success_rate"`
+}
+
+type ChannelMetric struct {
+	Channel string `json:"channel"`
+	Amount  int64  `json:"amount"`
+	Count   int    `json:"count"`
+}
+
+type ReasonMetric struct {
+	Reason string `json:"reason"`
+	Count  int    `json:"count"`
+}
+
+func (s *Service) Dashboard() Dashboard {
+	payments := s.List()
+	dashboard := Dashboard{Abnormal: make([]Payment, 0)}
+	byDate := map[string]*DailyMetric{}
+	byChannel := map[string]*ChannelMetric{}
+	byReason := map[string]*ReasonMetric{}
+	success := 0
+	totalByDate := map[string]int{}
+	successByDate := map[string]int{}
+
+	for _, p := range payments {
+		dashboard.KPIs.TotalPayments++
+		if p.Status == StatusPaid {
+			success++
+			dashboard.KPIs.GMV += p.Amount.Amount
+		}
+		if p.Status == StatusPending || p.CallbackStatus == CallbackPending {
+			dashboard.KPIs.UnsettledAmount += p.Amount.Amount
+		}
+		if p.CallbackStatus == CallbackFailed {
+			dashboard.KPIs.CallbackFailures++
+		}
+		if p.Status == StatusLost || p.CallbackStatus == CallbackLost {
+			dashboard.KPIs.LostOrders++
+		}
+		if isAbnormal(p) {
+			dashboard.Abnormal = append(dashboard.Abnormal, p)
+		}
+		date := p.CreatedAt.Format("2006-01-02")
+		totalByDate[date]++
+		if p.Status == StatusPaid {
+			successByDate[date]++
+		}
+		if _, ok := byDate[date]; !ok {
+			byDate[date] = &DailyMetric{Date: date}
+		}
+		byDate[date].Amount += p.Amount.Amount
+		if _, ok := byChannel[p.Channel]; !ok {
+			byChannel[p.Channel] = &ChannelMetric{Channel: p.Channel}
+		}
+		byChannel[p.Channel].Amount += p.Amount.Amount
+		byChannel[p.Channel].Count++
+		reason := p.FailureReason
+		if reason == "" && p.CallbackStatus == CallbackPending {
+			reason = "waiting callback"
+		}
+		if reason != "" {
+			if _, ok := byReason[reason]; !ok {
+				byReason[reason] = &ReasonMetric{Reason: reason}
+			}
+			byReason[reason].Count++
+		}
+	}
+
+	if dashboard.KPIs.TotalPayments > 0 {
+		dashboard.KPIs.SuccessRate = float64(success) / float64(dashboard.KPIs.TotalPayments)
+	}
+	for date, metric := range byDate {
+		if totalByDate[date] > 0 {
+			metric.SuccessRate = float64(successByDate[date]) / float64(totalByDate[date])
+		}
+		dashboard.Series = append(dashboard.Series, *metric)
+	}
+	for _, metric := range byChannel {
+		dashboard.Channels = append(dashboard.Channels, *metric)
+	}
+	for _, metric := range byReason {
+		dashboard.Failures = append(dashboard.Failures, *metric)
+	}
+	sort.Slice(dashboard.Series, func(i, j int) bool { return dashboard.Series[i].Date < dashboard.Series[j].Date })
+	sort.Slice(dashboard.Channels, func(i, j int) bool { return dashboard.Channels[i].Amount > dashboard.Channels[j].Amount })
+	sort.Slice(dashboard.Failures, func(i, j int) bool { return dashboard.Failures[i].Count > dashboard.Failures[j].Count })
+	if len(dashboard.Abnormal) > 50 {
+		dashboard.Abnormal = dashboard.Abnormal[:50]
+	}
+	dashboard.ChannelInfo = s.registry.ChannelInfos()
+	return dashboard
+}
+
+func isAbnormal(p Payment) bool {
+	return p.Status == StatusLost || p.Status == StatusFailed || p.CallbackStatus == CallbackFailed || p.CallbackStatus == CallbackLost || p.CallbackStatus == CallbackPending
 }
 
 func validateCreate(req CreatePaymentRequest) error {

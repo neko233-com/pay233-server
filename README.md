@@ -40,6 +40,24 @@ go vet ./...
 - `GET /v1/payments/{id}`
 - `POST /v1/payments/{id}/close`
 - `POST /v1/webhooks/{channel}`
+- `GET /admin`
+
+Default admin credentials are `root` / `root`. Change them in config before production use.
+
+## Built-In Channels
+
+The first release includes a unified provider adapter layer for:
+
+- WeChat Pay
+- Alipay
+- Stripe
+- PayPal
+- Google Pay
+- Apple Pay / Apple iOS in-app purchase
+- UnionPay
+- Generic third-party providers
+
+Provider implementations currently share the same adapter contract and mockable creation/webhook flow. Real gateway SDK signing, certificate verification, refund capture, and settlement reconciliation can be added provider by provider behind the existing interface.
 
 Signed API requests use:
 

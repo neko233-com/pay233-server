@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pay233 Admin</title>
+  <link rel="stylesheet" href="/admin/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">P</span>
+        <div>
+          <strong>pay233</strong>
+          <small>支付中心</small>
+        </div>
+      </div>
+      <nav>
+        <a class="active">大盘</a>
+        <a>支付订单</a>
+        <a>回调中心</a>
+        <a>渠道配置</a>
+        <a>风控审计</a>
+        <a>系统设置</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1>支付运营大盘</h1>
+          <p>统一监控微信、支付宝、第三方、Google Pay、Apple iOS Pay 等渠道。</p>
+        </div>
+        <div class="userbar">
+          <span id="adminName">未登录</span>
+          <button id="logoutBtn" class="ghost">退出</button>
+        </div>
+      </header>
+
+      <section id="loginPanel" class="login-panel">
+        <form id="loginForm" class="login-box">
+          <h2>管理员登录</h2>
+          <label>账号<input name="username" value="root" autocomplete="username"></label>
+          <label>密码<input name="password" value="root" type="password" autocomplete="current-password"></label>
+          <button type="submit">登录后台</button>
+          <p id="loginError"></p>
+        </form>
+      </section>
+
+      <section id="dashboardPanel" class="dashboard hidden">
+        <div class="kpis">
+          <article><span>GMV</span><strong id="kpiGmv">0</strong><small>CNY 分</small></article>
+          <article><span>成功率</span><strong id="kpiSuccess">0%</strong><small>支付成功 / 总订单</small></article>
+          <article><span>回调失败</span><strong id="kpiCallback">0</strong><small>需人工处理</small></article>
+          <article><span>丢单</span><strong id="kpiLost">0</strong><small>对账异常</small></article>
+          <article><span>未结算</span><strong id="kpiUnsettled">0</strong><small>待回调或待支付</small></article>
+        </div>
+
+        <div class="grid">
+          <section class="panel wide">
+            <div class="panel-head">
+              <h2>交易趋势</h2>
+              <span>金额与成功率</span>
+            </div>
+            <div id="trendChart" class="chart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>渠道分布</h2>
+              <span>按金额</span>
+            </div>
+            <div id="channelChart" class="chart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>失败原因</h2>
+              <span>回调与对账</span>
+            </div>
+            <div id="failureChart" class="chart"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>渠道健康</h2>
+              <span>已配置接入</span>
+            </div>
+            <div id="channelHealth" class="channel-health"></div>
+          </section>
+        </div>
+
+        <section class="panel table-panel">
+          <div class="panel-head">
+            <h2>异常支付与丢单处理</h2>
+            <span>未成功回调、回调失败、疑似丢单</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>支付单号</th>
+                  <th>商户订单</th>
+                  <th>渠道</th>
+                  <th>金额</th>
+                  <th>支付状态</th>
+                  <th>回调状态</th>
+                  <th>原因</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="abnormalRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <script src="/admin/static/app.js"></script>
+</body>
+</html>

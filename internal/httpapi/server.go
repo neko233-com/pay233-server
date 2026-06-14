@@ -42,16 +42,31 @@ func NewServer(deps Dependencies) *Server {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
+	mux.HandleFunc("GET /favicon.ico", s.favicon)
 	mux.HandleFunc("GET /v1/channels", s.channels)
 	mux.HandleFunc("POST /v1/payments", s.withSignedBody(s.createPayment))
 	mux.HandleFunc("GET /v1/payments/{id}", s.getPayment)
 	mux.HandleFunc("POST /v1/payments/{id}/close", s.withSignedBody(s.closePayment))
 	mux.HandleFunc("POST /v1/webhooks/{channel}", s.webhook)
+	mux.HandleFunc("GET /admin", s.adminIndex)
+	mux.HandleFunc("GET /admin/", s.adminIndex)
+	mux.HandleFunc("GET /admin/static/{file}", s.adminStatic)
+	mux.HandleFunc("POST /admin/login", s.adminLogin)
+	mux.HandleFunc("POST /admin/logout", s.adminLogout)
+	mux.HandleFunc("GET /admin/api/session", s.adminSession)
+	mux.HandleFunc("GET /admin/api/me", s.withAdmin(s.adminMe))
+	mux.HandleFunc("GET /admin/api/dashboard", s.withAdmin(s.adminDashboard))
+	mux.HandleFunc("GET /admin/api/payments", s.withAdmin(s.adminPayments))
+	mux.HandleFunc("POST /admin/api/payments/{id}/mark-lost", s.withAdmin(s.adminMarkLost))
 	return mux
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) favicon(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) channels(w http.ResponseWriter, _ *http.Request) {

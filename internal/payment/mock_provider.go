@@ -8,20 +8,45 @@ import (
 	"fmt"
 )
 
-type MockProvider struct {
+type ConfiguredProvider struct {
+	provider   string
+	display    string
+	family     string
 	payURLBase string
 }
 
+type MockProvider = ConfiguredProvider
+
 func NewMockProvider(options map[string]string) *MockProvider {
-	base := options["pay_url_base"]
-	if base == "" {
-		base = "https://pay233.local/mock/pay"
-	}
-	return &MockProvider{payURLBase: base}
+	return NewConfiguredProvider("mock", options)
 }
 
-func (p *MockProvider) CreatePayment(_ context.Context, req ProviderCreateRequest) (ProviderCreateResponse, error) {
-	trade := "mock_" + randomHex(8)
+func NewConfiguredProvider(provider string, options map[string]string) *ConfiguredProvider {
+	info := providerCatalog(provider)
+	base := options["pay_url_base"]
+	if base == "" {
+		base = "https://pay233.local/" + provider + "/pay"
+	}
+	return &ConfiguredProvider{
+		provider:   provider,
+		display:    info.DisplayName,
+		family:     info.Family,
+		payURLBase: base,
+	}
+}
+
+func (p *ConfiguredProvider) Info() ProviderInfo {
+	info := providerCatalog(p.provider)
+	return ProviderInfo{
+		DisplayName:  info.DisplayName,
+		Family:       info.Family,
+		Capabilities: info.Capabilities,
+		Health:       "ok",
+	}
+}
+
+func (p *ConfiguredProvider) CreatePayment(_ context.Context, req ProviderCreateRequest) (ProviderCreateResponse, error) {
+	trade := p.provider + "_" + randomHex(8)
 	return ProviderCreateResponse{
 		ProviderTrade: trade,
 		PayURL:        fmt.Sprintf("%s/%s", p.payURLBase, trade),
@@ -29,11 +54,11 @@ func (p *MockProvider) CreatePayment(_ context.Context, req ProviderCreateReques
 	}, nil
 }
 
-func (p *MockProvider) ClosePayment(_ context.Context, _ Payment) error {
+func (p *ConfiguredProvider) ClosePayment(_ context.Context, _ Payment) error {
 	return nil
 }
 
-func (p *MockProvider) ParseWebhook(_ context.Context, raw []byte, _ map[string]string) (WebhookEvent, error) {
+func (p *ConfiguredProvider) ParseWebhook(_ context.Context, raw []byte, _ map[string]string) (WebhookEvent, error) {
 	var event struct {
 		ProviderTrade string        `json:"provider_trade"`
 		OutTradeNo    string        `json:"out_trade_no"`
@@ -48,6 +73,31 @@ func (p *MockProvider) ParseWebhook(_ context.Context, raw []byte, _ map[string]
 		Status:        event.Status,
 		Raw:           raw,
 	}, nil
+}
+
+func providerCatalog(provider string) ProviderInfo {
+	switch provider {
+	case "wechat_pay":
+		return ProviderInfo{DisplayName: "微信支付", Family: "wallet", Capabilities: []string{"native", "jsapi", "mini_program", "refund", "webhook"}}
+	case "alipay":
+		return ProviderInfo{DisplayName: "支付宝", Family: "wallet", Capabilities: []string{"page_pay", "app_pay", "refund", "webhook"}}
+	case "stripe":
+		return ProviderInfo{DisplayName: "Stripe", Family: "card", Capabilities: []string{"card", "checkout", "refund", "webhook"}}
+	case "paypal":
+		return ProviderInfo{DisplayName: "PayPal", Family: "wallet", Capabilities: []string{"checkout", "refund", "webhook"}}
+	case "google_pay":
+		return ProviderInfo{DisplayName: "Google Pay", Family: "wallet", Capabilities: []string{"tokenized_card", "app_pay", "webhook"}}
+	case "apple_iap":
+		return ProviderInfo{DisplayName: "Apple iOS Pay", Family: "iap", Capabilities: []string{"receipt_verify", "subscription", "server_notification"}}
+	case "apple_pay":
+		return ProviderInfo{DisplayName: "Apple Pay", Family: "wallet", Capabilities: []string{"tokenized_card", "app_pay", "webhook"}}
+	case "unionpay":
+		return ProviderInfo{DisplayName: "银联", Family: "card", Capabilities: []string{"quick_pay", "refund", "webhook"}}
+	case "mock":
+		return ProviderInfo{DisplayName: "Mock", Family: "test", Capabilities: []string{"create", "close", "webhook"}}
+	default:
+		return ProviderInfo{DisplayName: provider, Family: "third_party", Capabilities: []string{"create", "close", "webhook"}}
+	}
 }
 
 func randomHex(n int) string {

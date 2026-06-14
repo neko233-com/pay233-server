@@ -139,7 +139,8 @@ func TestChannels(t *testing.T) {
 
 func testServer() *Server {
 	cfg := config.Config{
-		API: config.APIConfig{SigningSecret: "secret"},
+		API:   config.APIConfig{SigningSecret: "secret"},
+		Admin: config.AdminConfig{Username: "root", Password: "root", SessionSecret: "admin-secret"},
 		Channels: []config.ChannelConfig{{
 			Name:     "mock",
 			Provider: "mock",

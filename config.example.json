@@ -5,6 +5,11 @@
   "api": {
     "signing_secret": "dev-secret"
   },
+  "admin": {
+    "username": "root",
+    "password": "root",
+    "session_secret": "dev-admin-secret"
+  },
   "channels": [
     {
       "name": "mock",
@@ -12,6 +17,69 @@
       "enabled": true,
       "options": {
         "pay_url_base": "https://pay233.local/mock/pay"
+      }
+    },
+    {
+      "name": "wechat",
+      "provider": "wechat_pay",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/wechat/pay"
+      }
+    },
+    {
+      "name": "alipay",
+      "provider": "alipay",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/alipay/pay"
+      }
+    },
+    {
+      "name": "stripe",
+      "provider": "stripe",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/stripe/pay"
+      }
+    },
+    {
+      "name": "paypal",
+      "provider": "paypal",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/paypal/pay"
+      }
+    },
+    {
+      "name": "google-pay",
+      "provider": "google_pay",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/google-pay/pay"
+      }
+    },
+    {
+      "name": "apple-iap",
+      "provider": "apple_iap",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/apple-iap/pay"
+      }
+    },
+    {
+      "name": "unionpay",
+      "provider": "unionpay",
+      "enabled": true,
+      "options": {
+        "mode": "adapter",
+        "pay_url_base": "https://pay233.local/unionpay/pay"
       }
     }
   ]

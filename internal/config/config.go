@@ -10,6 +10,7 @@ import (
 type Config struct {
 	HTTP     HTTPConfig      `json:"http"`
 	API      APIConfig       `json:"api"`
+	Admin    AdminConfig     `json:"admin"`
 	Channels []ChannelConfig `json:"channels"`
 }
 
@@ -19,6 +20,12 @@ type HTTPConfig struct {
 
 type APIConfig struct {
 	SigningSecret string `json:"signing_secret"`
+}
+
+type AdminConfig struct {
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	SessionSecret string `json:"session_secret"`
 }
 
 type ChannelConfig struct {
@@ -43,6 +50,15 @@ func Load(path string) (Config, error) {
 
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":8080"
+	}
+	if cfg.Admin.Username == "" {
+		cfg.Admin.Username = "root"
+	}
+	if cfg.Admin.Password == "" {
+		cfg.Admin.Password = "root"
+	}
+	if cfg.Admin.SessionSecret == "" {
+		cfg.Admin.SessionSecret = cfg.API.SigningSecret
 	}
 	for i, channel := range cfg.Channels {
 		if channel.Name == "" {

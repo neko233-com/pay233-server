@@ -1,10 +1,6 @@
 package payment
 
-import (
-	"fmt"
-
-	"github.com/neko233-com/pay233-server/internal/config"
-)
+import "github.com/neko233-com/pay233-server/internal/config"
 
 type Registry struct {
 	providers map[string]Provider
@@ -31,17 +27,22 @@ func (r *Registry) Channels() []string {
 	return channels
 }
 
+func (r *Registry) ChannelInfos() []ProviderInfo {
+	infos := make([]ProviderInfo, 0, len(r.providers))
+	for channel, provider := range r.providers {
+		info := provider.Info()
+		info.Name = channel
+		infos = append(infos, info)
+	}
+	return infos
+}
+
 func RegisterConfiguredProviders(registry *Registry, channels []config.ChannelConfig) error {
 	for _, channel := range channels {
 		if !channel.Enabled {
 			continue
 		}
-		switch channel.Provider {
-		case "mock":
-			registry.Register(channel.Name, NewMockProvider(channel.Options))
-		default:
-			return fmt.Errorf("unsupported provider %q for channel %q", channel.Provider, channel.Name)
-		}
+		registry.Register(channel.Name, NewConfiguredProvider(channel.Provider, channel.Options))
 	}
 	return nil
 }

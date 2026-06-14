@@ -8,6 +8,7 @@ import (
 type Store interface {
 	Create(Payment) (Payment, error)
 	Get(id string) (Payment, bool)
+	List() []Payment
 	Update(Payment) (Payment, error)
 	FindByOutTradeNo(channel string, outTradeNo string) (Payment, bool)
 }
@@ -43,6 +44,17 @@ func (s *MemoryStore) Get(id string) (Payment, bool) {
 
 	payment, ok := s.records[id]
 	return payment, ok
+}
+
+func (s *MemoryStore) List() []Payment {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	payments := make([]Payment, 0, len(s.records))
+	for _, payment := range s.records {
+		payments = append(payments, payment)
+	}
+	return payments
 }
 
 func (s *MemoryStore) Update(payment Payment) (Payment, error) {
