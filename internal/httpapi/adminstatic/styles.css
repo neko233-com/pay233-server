@@ -226,6 +226,8 @@ button.ghost { background: #e9eef7; color: #26344f; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { text-align: left; border-bottom: 1px solid var(--border); padding: 11px 8px; white-space: nowrap; }
 th { color: var(--muted); font-size: 12px; font-weight: 700; }
+.row-actions { display: inline-flex; gap: 8px; align-items: center; }
+.row-actions button { padding: 7px 10px; }
 
 @media (max-width: 960px) {
   .app-shell { grid-template-columns: 1fr; }

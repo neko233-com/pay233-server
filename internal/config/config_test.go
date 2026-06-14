@@ -25,6 +25,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.Logging.RetentionDays != 31 {
 		t.Fatalf("expected default log retention, got %d", cfg.Logging.RetentionDays)
 	}
+	if cfg.Storage.PaymentsPath != "data/payments.jsonl" {
+		t.Fatalf("expected default payment store, got %q", cfg.Storage.PaymentsPath)
+	}
 }
 
 func TestLoadValidatesChannel(t *testing.T) {

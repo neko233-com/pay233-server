@@ -12,6 +12,7 @@ var (
 	ErrChannelNotConfigured = errors.New("payment channel is not configured")
 	ErrPaymentNotFound      = errors.New("payment not found")
 	ErrInvalidPaymentState  = errors.New("invalid payment state")
+	ErrDuplicatePayment     = errors.New("payment already exists for envType, channel, and out_trade_no")
 )
 
 type Money struct {

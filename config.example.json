@@ -14,6 +14,9 @@
     "dir": "logs",
     "retention_days": 31
   },
+  "storage": {
+    "payments_path": "data/payments.jsonl"
+  },
   "channels": [
     {
       "name": "mock",

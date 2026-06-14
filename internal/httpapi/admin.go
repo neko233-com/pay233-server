@@ -166,6 +166,27 @@ func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payment)
 }
 
+func (s *Server) adminRetryCallback(w http.ResponseWriter, r *http.Request) {
+	payment, err := s.service.Get(r.PathValue("id"))
+	if err != nil {
+		s.writePaymentError(w, err)
+		return
+	}
+	if payment.NotifyURL == "" {
+		writeError(w, http.StatusBadRequest, errors.New("payment has no notify_url"))
+		return
+	}
+	updated, err := s.deliverMerchantCallback(r.Context(), payment)
+	if err != nil {
+		s.logger.Warn("manual merchant callback retry failed", "payment_id", payment.ID, "error", err)
+		s.logPayment("payment_callback_retry_failed", updated)
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+	s.logPayment("payment_callback_retry_success", updated)
+	writeJSON(w, http.StatusOK, updated)
+}
+
 func (s *Server) withAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.requestIsAdmin(r) {

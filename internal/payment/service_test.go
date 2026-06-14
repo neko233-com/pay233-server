@@ -2,6 +2,8 @@ package payment
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"testing"
 )
 
@@ -88,6 +90,64 @@ func TestServiceSeparatesEnvironments(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsDuplicateOrderInSameEnvironment(t *testing.T) {
+	service := testService()
+	req := CreatePaymentRequest{
+		EnvType:    EnvTypeTest,
+		MerchantID: "m1",
+		OutTradeNo: "same-order",
+		Channel:    "mock",
+		Amount:     Money{Currency: "CNY", Amount: 100},
+		Subject:    "test",
+	}
+	if _, err := service.Create(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Create(context.Background(), req); !errors.Is(err, ErrDuplicatePayment) {
+		t.Fatalf("expected ErrDuplicatePayment, got %v", err)
+	}
+}
+
+func TestFileStorePersistsPayments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "payments.jsonl")
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := testServiceWithStore(store)
+	created, err := service.Create(context.Background(), CreatePaymentRequest{
+		EnvType:    EnvTypeRelease,
+		MerchantID: "m1",
+		OutTradeNo: "persist-1",
+		Channel:    "mock",
+		Amount:     Money{Currency: "CNY", Amount: 100},
+		Subject:    "persist",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed, err := service.Close(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	got, ok := reopened.FindByOutTradeNo(EnvTypeRelease, "mock", "persist-1")
+	if !ok {
+		t.Fatal("expected persisted payment")
+	}
+	if got.ID != created.ID || got.Status != closed.Status {
+		t.Fatalf("unexpected persisted payment: %#v", got)
+	}
+}
+
 func TestServiceRejectsUnknownChannel(t *testing.T) {
 	service := testService()
 
@@ -151,7 +211,11 @@ func TestServiceClosePayment(t *testing.T) {
 }
 
 func testService() *Service {
+	return testServiceWithStore(NewMemoryStore())
+}
+
+func testServiceWithStore(store Store) *Service {
 	registry := NewRegistry()
 	registry.Register("mock", NewMockProvider(nil))
-	return NewService(registry, NewMemoryStore())
+	return NewService(registry, store)
 }

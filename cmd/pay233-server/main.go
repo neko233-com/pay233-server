@@ -43,7 +43,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	store := payment.NewMemoryStore()
+	store, err := payment.NewFileStore(cfg.Storage.PaymentsPath)
+	if err != nil {
+		slog.Error("open payment store", "path", cfg.Storage.PaymentsPath, "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			slog.Error("close payment store", "error", err)
+		}
+	}()
 	handler := httpapi.NewServer(httpapi.Dependencies{
 		Config:        cfg,
 		Registry:      registry,

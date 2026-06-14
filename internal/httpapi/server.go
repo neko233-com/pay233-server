@@ -1,12 +1,16 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/neko233-com/pay233-server/internal/config"
 	"github.com/neko233-com/pay233-server/internal/payment"
@@ -67,6 +71,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /admin/api/dashboard", s.withAdmin(s.adminDashboard))
 	mux.HandleFunc("GET /admin/api/payments", s.withAdmin(s.adminPayments))
 	mux.HandleFunc("POST /admin/api/payments/{id}/mark-lost", s.withAdmin(s.adminMarkLost))
+	mux.HandleFunc("POST /admin/api/payments/{id}/retry-callback", s.withAdmin(s.adminRetryCallback))
 	return mux
 }
 
@@ -134,6 +139,18 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logPayment("payment_webhook_applied", updated)
+	if updated.NotifyURL != "" {
+		callbacked, callbackErr := s.deliverMerchantCallback(r.Context(), updated)
+		if callbackErr != nil {
+			s.logger.Warn("merchant callback failed", "payment_id", updated.ID, "notify_url", updated.NotifyURL, "error", callbackErr)
+			s.logPayment("payment_callback_failed", callbacked)
+			writeJSON(w, http.StatusOK, callbacked)
+			return
+		}
+		s.logPayment("payment_callback_success", callbacked)
+		writeJSON(w, http.StatusOK, callbacked)
+		return
+	}
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -159,6 +176,8 @@ func (s *Server) writePaymentError(w http.ResponseWriter, err error) {
 	case errors.Is(err, payment.ErrPaymentNotFound):
 		writeError(w, http.StatusNotFound, err)
 	case errors.Is(err, payment.ErrInvalidPaymentState):
+		writeError(w, http.StatusConflict, err)
+	case errors.Is(err, payment.ErrDuplicatePayment):
 		writeError(w, http.StatusConflict, err)
 	default:
 		writeError(w, http.StatusBadRequest, err)
@@ -190,4 +209,56 @@ func (s *Server) logPayment(event string, p payment.Payment) {
 		"provider_trade", p.ProviderTrade,
 		"failure_reason", p.FailureReason,
 	)
+}
+
+func (s *Server) deliverMerchantCallback(ctx context.Context, p payment.Payment) (payment.Payment, error) {
+	if p.NotifyURL == "" {
+		return p, nil
+	}
+	body, err := json.Marshal(p)
+	if err != nil {
+		updated, updateErr := s.service.RecordMerchantCallback(p.ID, false, err.Error())
+		if updateErr != nil {
+			return p, updateErr
+		}
+		return updated, err
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, p.NotifyURL, bytes.NewReader(body))
+	if err != nil {
+		updated, updateErr := s.service.RecordMerchantCallback(p.ID, false, err.Error())
+		if updateErr != nil {
+			return p, updateErr
+		}
+		return updated, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.cfg.API.SigningSecret != "" {
+		timestamp := time.Now().UTC().Format(time.RFC3339)
+		req.Header.Set(headerTimestamp, timestamp)
+		req.Header.Set(headerSignature, signPayload(s.cfg.API.SigningSecret, timestamp, body))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		updated, updateErr := s.service.RecordMerchantCallback(p.ID, false, err.Error())
+		if updateErr != nil {
+			return p, updateErr
+		}
+		return updated, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("merchant callback returned status %d", resp.StatusCode)
+		updated, updateErr := s.service.RecordMerchantCallback(p.ID, false, err.Error())
+		if updateErr != nil {
+			return p, updateErr
+		}
+		return updated, err
+	}
+	updated, err := s.service.RecordMerchantCallback(p.ID, true, "")
+	if err != nil {
+		return p, err
+	}
+	return updated, nil
 }

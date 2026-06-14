@@ -34,6 +34,20 @@ Configure the directory and retention:
 }
 ```
 
+## Storage
+
+Payments are persisted to an append-only JSONL file by default:
+
+```json
+{
+  "storage": {
+    "payments_path": "data/payments.jsonl"
+  }
+}
+```
+
+The server replays this file on startup, so orders survive process restarts. Back up this file together with daily payment logs. For larger deployments, keep the `payment.Store` interface and replace the file store with PostgreSQL, MySQL, or another transactional backend.
+
 ## Release
 
 Pushing a tag like `v0.1.0` builds GitHub Release assets:
@@ -90,6 +104,15 @@ Default admin credentials are `root` / `root`. Change them in config before prod
 Use `test` for sandbox traffic and `release` for formal payment traffic. Missing values default to `test`; `env_type` is accepted as an alias. The order index includes the environment, so the same merchant order number can be tested and then released on the same server without collision.
 
 Webhook payloads also accept `envType` / `env_type`. The admin APIs support `?envType=test`, `?envType=release`, and `?envType=all`; the dashboard UI exposes the same switch.
+
+## Merchant Callbacks
+
+When a payment has `notify_url`, provider webhooks trigger a POST to the merchant callback URL. The body is the latest payment JSON, signed with the same headers used by API requests:
+
+- `X-Pay233-Timestamp`
+- `X-Pay233-Signature`
+
+The signature is `hex(hmac_sha256(secret, timestamp + "." + body))`. Non-2xx merchant responses are recorded as callback failures and shown in the admin dashboard. Admins can retry failed callbacks from the abnormal payment table.
 
 ## Built-In Channels
 

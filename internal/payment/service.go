@@ -122,15 +122,16 @@ func (s *Service) ApplyWebhook(ctx context.Context, channel string, raw []byte, 
 	}
 	payment.ProviderTrade = event.ProviderTrade
 	payment.Status = event.Status
-	now := time.Now().UTC()
-	payment.LastCallbackAt = &now
-	payment.CallbackAttempts++
 	payment.CallbackError = ""
 	if event.Status == StatusPaid {
-		payment.CallbackStatus = CallbackSuccess
+		if payment.NotifyURL != "" {
+			payment.CallbackStatus = CallbackPending
+		}
 	} else if event.Status == StatusFailed {
-		payment.CallbackStatus = CallbackFailed
 		payment.FailureReason = "provider reported failure"
+		if payment.NotifyURL != "" {
+			payment.CallbackStatus = CallbackPending
+		}
 	}
 	return s.store.Update(payment)
 }
@@ -166,6 +167,27 @@ func (s *Service) MarkLost(id string, reason string) (Payment, error) {
 	payment.FailureReason = reason
 	if payment.FailureReason == "" {
 		payment.FailureReason = "manual reconciliation marked lost"
+	}
+	return s.store.Update(payment)
+}
+
+func (s *Service) RecordMerchantCallback(id string, success bool, message string) (Payment, error) {
+	payment, err := s.Get(id)
+	if err != nil {
+		return Payment{}, err
+	}
+	now := time.Now().UTC()
+	payment.LastCallbackAt = &now
+	payment.CallbackAttempts++
+	if success {
+		payment.CallbackStatus = CallbackSuccess
+		payment.CallbackError = ""
+	} else {
+		payment.CallbackStatus = CallbackFailed
+		payment.CallbackError = message
+		if payment.CallbackError == "" {
+			payment.CallbackError = "merchant callback failed"
+		}
 	}
 	return s.store.Update(payment)
 }

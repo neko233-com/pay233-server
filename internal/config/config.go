@@ -12,6 +12,7 @@ type Config struct {
 	API      APIConfig       `json:"api"`
 	Admin    AdminConfig     `json:"admin"`
 	Logging  LoggingConfig   `json:"logging"`
+	Storage  StorageConfig   `json:"storage"`
 	Channels []ChannelConfig `json:"channels"`
 }
 
@@ -32,6 +33,10 @@ type AdminConfig struct {
 type LoggingConfig struct {
 	Dir           string `json:"dir"`
 	RetentionDays int    `json:"retention_days"`
+}
+
+type StorageConfig struct {
+	PaymentsPath string `json:"payments_path"`
 }
 
 type ChannelConfig struct {
@@ -71,6 +76,9 @@ func Load(path string) (Config, error) {
 	}
 	if cfg.Logging.RetentionDays <= 0 {
 		cfg.Logging.RetentionDays = 31
+	}
+	if cfg.Storage.PaymentsPath == "" {
+		cfg.Storage.PaymentsPath = "data/payments.jsonl"
 	}
 	for i, channel := range cfg.Channels {
 		if channel.Name == "" {

@@ -32,6 +32,13 @@ function statusClass(value) {
   return "warn";
 }
 
+function rowActions(p) {
+  const retry = p.notify_url && p.callback_status !== "success"
+    ? `<button class="ghost" data-retry="${p.id}">重试回调</button>`
+    : "";
+  return `<div class="row-actions">${retry}<button class="ghost" data-lost="${p.id}">标记丢单</button></div>`;
+}
+
 async function loadDashboard() {
   syncEnvButtons();
   const suffix = currentEnv === "all" ? "?envType=all" : `?envType=${encodeURIComponent(currentEnv)}`;
@@ -132,7 +139,7 @@ function renderAbnormal(rows) {
       <td><span class="status ${statusClass(p.status)}">${p.status}</span></td>
       <td><span class="status ${statusClass(p.callback_status)}">${p.callback_status}</span></td>
       <td>${p.failure_reason || p.callback_error || "-"}</td>
-      <td><button class="ghost" data-lost="${p.id}">标记丢单</button></td>
+      <td>${rowActions(p)}</td>
     </tr>
   `).join("");
 }
@@ -154,6 +161,16 @@ document.addEventListener("click", async (event) => {
   await api(`/admin/api/payments/${id}/mark-lost`, {
     method: "POST",
     body: JSON.stringify({ reason: "admin marked as lost order" }),
+  });
+  await loadDashboard();
+});
+
+document.addEventListener("click", async (event) => {
+  const id = event.target && event.target.dataset && event.target.dataset.retry;
+  if (!id) return;
+  await api(`/admin/api/payments/${id}/retry-callback`, {
+    method: "POST",
+    body: "{}",
   });
   await loadDashboard();
 });
