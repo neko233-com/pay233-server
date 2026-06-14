@@ -2,7 +2,9 @@ package payment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -15,6 +17,24 @@ var (
 type Money struct {
 	Currency string `json:"currency"`
 	Amount   int64  `json:"amount"`
+}
+
+type EnvType string
+
+const (
+	EnvTypeTest    EnvType = "test"
+	EnvTypeRelease EnvType = "release"
+)
+
+func NormalizeEnvType(value string) (EnvType, error) {
+	switch EnvType(value) {
+	case "", EnvTypeTest:
+		return EnvTypeTest, nil
+	case EnvTypeRelease:
+		return EnvTypeRelease, nil
+	default:
+		return "", fmt.Errorf("envType must be test or release")
+	}
 }
 
 type PaymentStatus string
@@ -41,6 +61,7 @@ const (
 
 type Payment struct {
 	ID               string            `json:"id"`
+	EnvType          EnvType           `json:"env_type"`
 	MerchantID       string            `json:"merchant_id"`
 	OutTradeNo       string            `json:"out_trade_no"`
 	Channel          string            `json:"channel"`
@@ -61,6 +82,7 @@ type Payment struct {
 }
 
 type CreatePaymentRequest struct {
+	EnvType    EnvType           `json:"env_type"`
 	MerchantID string            `json:"merchant_id"`
 	OutTradeNo string            `json:"out_trade_no"`
 	Channel    string            `json:"channel"`
@@ -68,6 +90,29 @@ type CreatePaymentRequest struct {
 	Subject    string            `json:"subject"`
 	NotifyURL  string            `json:"notify_url,omitempty"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
+func (r *CreatePaymentRequest) UnmarshalJSON(data []byte) error {
+	type alias CreatePaymentRequest
+	var raw struct {
+		alias
+		EnvTypeCamel string `json:"envType"`
+		EnvTypeSnake string `json:"env_type"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*r = CreatePaymentRequest(raw.alias)
+	env := raw.EnvTypeSnake
+	if env == "" {
+		env = raw.EnvTypeCamel
+	}
+	normalized, err := NormalizeEnvType(env)
+	if err != nil {
+		return err
+	}
+	r.EnvType = normalized
+	return nil
 }
 
 type ProviderCreateRequest struct {
@@ -81,6 +126,7 @@ type ProviderCreateResponse struct {
 }
 
 type WebhookEvent struct {
+	EnvType       EnvType
 	ProviderTrade string
 	OutTradeNo    string
 	Status        PaymentStatus

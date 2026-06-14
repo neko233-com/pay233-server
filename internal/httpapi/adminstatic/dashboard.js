@@ -1,6 +1,8 @@
 const adminName = document.querySelector("#adminName");
 const logoutBtn = document.querySelector("#logoutBtn");
+const envButtons = Array.from(document.querySelectorAll("[data-env]"));
 const charts = {};
+let currentEnv = new URLSearchParams(window.location.search).get("envType") || "test";
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -31,7 +33,9 @@ function statusClass(value) {
 }
 
 async function loadDashboard() {
-  const data = await api("/admin/api/dashboard");
+  syncEnvButtons();
+  const suffix = currentEnv === "all" ? "?envType=all" : `?envType=${encodeURIComponent(currentEnv)}`;
+  const data = await api(`/admin/api/dashboard${suffix}`);
   document.querySelector("#kpiGmv").textContent = money(data.kpis.gmv);
   document.querySelector("#kpiSuccess").textContent = pct(data.kpis.success_rate);
   document.querySelector("#kpiCallback").textContent = data.kpis.callback_failures;
@@ -115,12 +119,13 @@ function renderHealth(channels) {
 function renderAbnormal(rows) {
   const tbody = document.querySelector("#abnormalRows");
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8">暂无异常支付</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9">暂无异常支付</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map((p) => `
     <tr>
       <td>${p.id}</td>
+      <td><span class="status ${p.env_type === "release" ? "bad" : "ok"}">${p.env_type}</span></td>
       <td>${p.out_trade_no}</td>
       <td>${p.channel}</td>
       <td>${money(p.amount && p.amount.amount)}</td>
@@ -130,6 +135,12 @@ function renderAbnormal(rows) {
       <td><button class="ghost" data-lost="${p.id}">标记丢单</button></td>
     </tr>
   `).join("");
+}
+
+function syncEnvButtons() {
+  envButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.env === currentEnv);
+  });
 }
 
 logoutBtn.addEventListener("click", async () => {
@@ -145,6 +156,16 @@ document.addEventListener("click", async (event) => {
     body: JSON.stringify({ reason: "admin marked as lost order" }),
   });
   await loadDashboard();
+});
+
+envButtons.forEach((button) => {
+  button.addEventListener("click", async () => {
+    currentEnv = button.dataset.env;
+    const url = new URL(window.location.href);
+    url.searchParams.set("envType", currentEnv);
+    window.history.replaceState({}, "", url);
+    await loadDashboard();
+  });
 });
 
 window.addEventListener("resize", () => Object.values(charts).forEach((c) => c.resize()));

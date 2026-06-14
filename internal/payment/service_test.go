@@ -46,7 +46,7 @@ func TestServiceDashboardTracksAbnormalPayments(t *testing.T) {
 		t.Fatalf("expected callback pending, got %s", created.CallbackStatus)
 	}
 
-	dashboard := service.Dashboard()
+	dashboard := service.Dashboard(ListFilter{})
 	if dashboard.KPIs.TotalPayments != 1 {
 		t.Fatalf("expected one payment, got %d", dashboard.KPIs.TotalPayments)
 	}
@@ -55,6 +55,36 @@ func TestServiceDashboardTracksAbnormalPayments(t *testing.T) {
 	}
 	if len(dashboard.ChannelInfo) == 0 {
 		t.Fatal("expected channel info")
+	}
+}
+
+func TestServiceSeparatesEnvironments(t *testing.T) {
+	service := testService()
+	for _, envType := range []EnvType{EnvTypeTest, EnvTypeRelease} {
+		_, err := service.Create(context.Background(), CreatePaymentRequest{
+			EnvType:    envType,
+			MerchantID: "m1",
+			OutTradeNo: "same-order",
+			Channel:    "mock",
+			Amount:     Money{Currency: "CNY", Amount: 100},
+			Subject:    "test",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testDashboard := service.Dashboard(ListFilter{EnvType: EnvTypeTest})
+	if testDashboard.KPIs.TotalPayments != 1 {
+		t.Fatalf("expected one test payment, got %d", testDashboard.KPIs.TotalPayments)
+	}
+	releaseDashboard := service.Dashboard(ListFilter{EnvType: EnvTypeRelease})
+	if releaseDashboard.KPIs.TotalPayments != 1 {
+		t.Fatalf("expected one release payment, got %d", releaseDashboard.KPIs.TotalPayments)
+	}
+	allDashboard := service.Dashboard(ListFilter{})
+	if allDashboard.KPIs.TotalPayments != 2 {
+		t.Fatalf("expected two all payments, got %d", allDashboard.KPIs.TotalPayments)
 	}
 }
 

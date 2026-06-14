@@ -178,6 +178,7 @@ func writeError(w http.ResponseWriter, status int, err error) {
 func (s *Server) logPayment(event string, p payment.Payment) {
 	s.paymentLogger.Info(event,
 		"payment_id", p.ID,
+		"env_type", p.EnvType,
 		"merchant_id", p.MerchantID,
 		"out_trade_no", p.OutTradeNo,
 		"channel", p.Channel,

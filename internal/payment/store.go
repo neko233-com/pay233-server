@@ -10,7 +10,7 @@ type Store interface {
 	Get(id string) (Payment, bool)
 	List() []Payment
 	Update(Payment) (Payment, error)
-	FindByOutTradeNo(channel string, outTradeNo string) (Payment, bool)
+	FindByOutTradeNo(envType EnvType, channel string, outTradeNo string) (Payment, bool)
 }
 
 type MemoryStore struct {
@@ -34,7 +34,7 @@ func (s *MemoryStore) Create(payment Payment) (Payment, error) {
 	payment.CreatedAt = now
 	payment.UpdatedAt = now
 	s.records[payment.ID] = payment
-	s.outIndex[indexKey(payment.Channel, payment.OutTradeNo)] = payment.ID
+	s.outIndex[indexKey(payment.EnvType, payment.Channel, payment.OutTradeNo)] = payment.ID
 	return payment, nil
 }
 
@@ -66,15 +66,15 @@ func (s *MemoryStore) Update(payment Payment) (Payment, error) {
 	}
 	payment.UpdatedAt = time.Now().UTC()
 	s.records[payment.ID] = payment
-	s.outIndex[indexKey(payment.Channel, payment.OutTradeNo)] = payment.ID
+	s.outIndex[indexKey(payment.EnvType, payment.Channel, payment.OutTradeNo)] = payment.ID
 	return payment, nil
 }
 
-func (s *MemoryStore) FindByOutTradeNo(channel string, outTradeNo string) (Payment, bool) {
+func (s *MemoryStore) FindByOutTradeNo(envType EnvType, channel string, outTradeNo string) (Payment, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	id, ok := s.outIndex[indexKey(channel, outTradeNo)]
+	id, ok := s.outIndex[indexKey(envType, channel, outTradeNo)]
 	if !ok {
 		return Payment{}, false
 	}
@@ -82,6 +82,6 @@ func (s *MemoryStore) FindByOutTradeNo(channel string, outTradeNo string) (Payme
 	return payment, ok
 }
 
-func indexKey(channel string, outTradeNo string) string {
-	return channel + "\x00" + outTradeNo
+func indexKey(envType EnvType, channel string, outTradeNo string) string {
+	return string(envType) + "\x00" + channel + "\x00" + outTradeNo
 }

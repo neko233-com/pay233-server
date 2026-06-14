@@ -52,6 +52,12 @@ go test -cover ./...
 go vet ./...
 ```
 
+From the umbrella repository, run the full local verification set:
+
+```bash
+make verify
+```
+
 ## API
 
 - `GET /healthz`
@@ -65,6 +71,25 @@ go vet ./...
 - `GET /admin/dashboard.html`
 
 Default admin credentials are `root` / `root`. Change them in config before production use.
+
+## Test and Release Environments
+
+`POST /v1/payments` supports `envType` on every request:
+
+```json
+{
+  "envType": "test",
+  "merchant_id": "merchant_1",
+  "out_trade_no": "order_10001",
+  "channel": "mock",
+  "amount": { "currency": "CNY", "amount": 100 },
+  "subject": "Test order"
+}
+```
+
+Use `test` for sandbox traffic and `release` for formal payment traffic. Missing values default to `test`; `env_type` is accepted as an alias. The order index includes the environment, so the same merchant order number can be tested and then released on the same server without collision.
+
+Webhook payloads also accept `envType` / `env_type`. The admin APIs support `?envType=test`, `?envType=release`, and `?envType=all`; the dashboard UI exposes the same switch.
 
 ## Built-In Channels
 

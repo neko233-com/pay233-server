@@ -60,6 +60,8 @@ func (p *ConfiguredProvider) ClosePayment(_ context.Context, _ Payment) error {
 
 func (p *ConfiguredProvider) ParseWebhook(_ context.Context, raw []byte, _ map[string]string) (WebhookEvent, error) {
 	var event struct {
+		EnvTypeCamel  string        `json:"envType"`
+		EnvTypeSnake  string        `json:"env_type"`
 		ProviderTrade string        `json:"provider_trade"`
 		OutTradeNo    string        `json:"out_trade_no"`
 		Status        PaymentStatus `json:"status"`
@@ -67,7 +69,16 @@ func (p *ConfiguredProvider) ParseWebhook(_ context.Context, raw []byte, _ map[s
 	if err := json.Unmarshal(raw, &event); err != nil {
 		return WebhookEvent{}, err
 	}
+	env := event.EnvTypeSnake
+	if env == "" {
+		env = event.EnvTypeCamel
+	}
+	envType, err := NormalizeEnvType(env)
+	if err != nil {
+		return WebhookEvent{}, err
+	}
 	return WebhookEvent{
+		EnvType:       envType,
 		ProviderTrade: event.ProviderTrade,
 		OutTradeNo:    event.OutTradeNo,
 		Status:        event.Status,

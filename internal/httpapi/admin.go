@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/neko233-com/pay233-server/internal/payment"
 )
 
 //go:embed adminstatic/*
@@ -129,12 +131,22 @@ func (s *Server) adminMe(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"username": s.cfg.Admin.Username})
 }
 
-func (s *Server) adminDashboard(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, s.service.Dashboard())
+func (s *Server) adminDashboard(w http.ResponseWriter, r *http.Request) {
+	filter, err := listFilterFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.service.Dashboard(filter))
 }
 
-func (s *Server) adminPayments(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"payments": s.service.List()})
+func (s *Server) adminPayments(w http.ResponseWriter, r *http.Request) {
+	filter, err := listFilterFromRequest(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"payments": s.service.ListFiltered(filter)})
 }
 
 func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
@@ -197,4 +209,19 @@ func (s *Server) adminSecret() string {
 		return s.cfg.API.SigningSecret
 	}
 	return "pay233-dev-admin-secret"
+}
+
+func listFilterFromRequest(r *http.Request) (payment.ListFilter, error) {
+	env := r.URL.Query().Get("envType")
+	if env == "" {
+		env = r.URL.Query().Get("env_type")
+	}
+	if env == "" || env == "all" {
+		return payment.ListFilter{}, nil
+	}
+	envType, err := payment.NormalizeEnvType(env)
+	if err != nil {
+		return payment.ListFilter{}, err
+	}
+	return payment.ListFilter{EnvType: envType}, nil
 }

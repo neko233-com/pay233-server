@@ -14,7 +14,7 @@ import (
 
 func TestCreatePaymentRequiresValidSignature(t *testing.T) {
 	handler := testServer().Routes()
-	body := []byte(`{"merchant_id":"m1","out_trade_no":"o1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+	body := []byte(`{"envType":"test","merchant_id":"m1","out_trade_no":"o1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -27,7 +27,7 @@ func TestCreatePaymentRequiresValidSignature(t *testing.T) {
 
 func TestCreatePayment(t *testing.T) {
 	handler := testServer().Routes()
-	body := []byte(`{"merchant_id":"m1","out_trade_no":"o1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+	body := []byte(`{"envType":"test","merchant_id":"m1","out_trade_no":"o1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
 
 	req := signedRequest(http.MethodPost, "/v1/payments", body)
 	rec := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func TestCreatePayment(t *testing.T) {
 
 func TestPaymentLifecycle(t *testing.T) {
 	handler := testServer().Routes()
-	body := []byte(`{"merchant_id":"m1","out_trade_no":"life-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+	body := []byte(`{"envType":"test","merchant_id":"m1","out_trade_no":"life-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
 
 	createReq := signedRequest(http.MethodPost, "/v1/payments", body)
 	createRec := httptest.NewRecorder()
@@ -90,7 +90,7 @@ func TestPaymentLifecycle(t *testing.T) {
 
 func TestWebhookMarksPaymentPaid(t *testing.T) {
 	handler := testServer().Routes()
-	body := []byte(`{"merchant_id":"m1","out_trade_no":"webhook-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+	body := []byte(`{"envType":"release","merchant_id":"m1","out_trade_no":"webhook-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
 
 	createReq := signedRequest(http.MethodPost, "/v1/payments", body)
 	createRec := httptest.NewRecorder()
@@ -99,7 +99,7 @@ func TestWebhookMarksPaymentPaid(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", createRec.Code, createRec.Body.String())
 	}
 
-	webhookBody := []byte(`{"provider_trade":"mock_paid","out_trade_no":"webhook-1","status":"paid"}`)
+	webhookBody := []byte(`{"envType":"release","provider_trade":"mock_paid","out_trade_no":"webhook-1","status":"paid"}`)
 	webhookReq := httptest.NewRequest(http.MethodPost, "/v1/webhooks/mock", bytes.NewReader(webhookBody))
 	webhookRec := httptest.NewRecorder()
 	handler.ServeHTTP(webhookRec, webhookReq)

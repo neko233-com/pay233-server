@@ -34,6 +34,11 @@
           <p>统一监控微信、支付宝、第三方、Google Pay、Apple iOS Pay 等渠道。</p>
         </div>
         <div class="userbar">
+          <div class="env-switch" role="group" aria-label="环境筛选">
+            <button class="active" data-env="test" type="button">测试</button>
+            <button data-env="release" type="button">正式</button>
+            <button data-env="all" type="button">全部</button>
+          </div>
           <span id="adminName">root</span>
           <button id="logoutBtn" class="ghost">退出</button>
         </div>
@@ -89,6 +94,7 @@
               <thead>
                 <tr>
                   <th>支付单号</th>
+                  <th>环境</th>
                   <th>商户订单</th>
                   <th>渠道</th>
                   <th>金额</th>

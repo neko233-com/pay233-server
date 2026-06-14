@@ -78,6 +78,24 @@ h1 { margin: 0; font-size: 26px; line-height: 1.2; }
 .topbar p { margin: 7px 0 0; color: var(--muted); font-size: 14px; }
 
 .userbar { display: flex; align-items: center; gap: 12px; }
+.env-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.env-switch button {
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.env-switch button.active {
+  background: #e8f2ff;
+  color: var(--blue);
+}
 button {
   border: 0;
   border-radius: 8px;
@@ -213,6 +231,7 @@ th { color: var(--muted); font-size: 12px; font-weight: 700; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .topbar { align-items: flex-start; flex-direction: column; }
+  .userbar { flex-wrap: wrap; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid { grid-template-columns: 1fr; }
   .login-screen {

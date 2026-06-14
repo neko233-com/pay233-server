@@ -87,7 +87,7 @@ func TestAdminLoginAndDashboard(t *testing.T) {
 
 func TestAdminMarkLost(t *testing.T) {
 	handler := testServer().Routes()
-	body := []byte(`{"merchant_id":"m1","out_trade_no":"lost-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test","notify_url":"https://merchant.test/notify"}`)
+	body := []byte(`{"envType":"test","merchant_id":"m1","out_trade_no":"lost-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test","notify_url":"https://merchant.test/notify"}`)
 	createReq := signedRequest(http.MethodPost, "/v1/payments", body)
 	createRec := httptest.NewRecorder()
 	handler.ServeHTTP(createRec, createReq)

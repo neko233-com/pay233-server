@@ -14,11 +14,20 @@ type Service struct {
 	store    Store
 }
 
+type ListFilter struct {
+	EnvType EnvType
+}
+
 func NewService(registry *Registry, store Store) *Service {
 	return &Service{registry: registry, store: store}
 }
 
 func (s *Service) Create(ctx context.Context, req CreatePaymentRequest) (Payment, error) {
+	envType, err := NormalizeEnvType(string(req.EnvType))
+	if err != nil {
+		return Payment{}, err
+	}
+	req.EnvType = envType
 	provider, ok := s.registry.Get(req.Channel)
 	if !ok {
 		return Payment{}, ErrChannelNotConfigured
@@ -29,6 +38,7 @@ func (s *Service) Create(ctx context.Context, req CreatePaymentRequest) (Payment
 
 	payment := Payment{
 		ID:             newID("pay"),
+		EnvType:        req.EnvType,
 		MerchantID:     req.MerchantID,
 		OutTradeNo:     req.OutTradeNo,
 		Channel:        req.Channel,
@@ -106,7 +116,7 @@ func (s *Service) ApplyWebhook(ctx context.Context, channel string, raw []byte, 
 		return Payment{}, err
 	}
 
-	payment, ok := s.store.FindByOutTradeNo(channel, event.OutTradeNo)
+	payment, ok := s.store.FindByOutTradeNo(event.EnvType, channel, event.OutTradeNo)
 	if !ok {
 		return Payment{}, ErrPaymentNotFound
 	}
@@ -126,7 +136,20 @@ func (s *Service) ApplyWebhook(ctx context.Context, channel string, raw []byte, 
 }
 
 func (s *Service) List() []Payment {
+	return s.ListFiltered(ListFilter{})
+}
+
+func (s *Service) ListFiltered(filter ListFilter) []Payment {
 	payments := s.store.List()
+	if filter.EnvType != "" {
+		filtered := make([]Payment, 0, len(payments))
+		for _, payment := range payments {
+			if payment.EnvType == filter.EnvType {
+				filtered = append(filtered, payment)
+			}
+		}
+		payments = filtered
+	}
 	sort.Slice(payments, func(i, j int) bool {
 		return payments[i].UpdatedAt.After(payments[j].UpdatedAt)
 	})
@@ -182,8 +205,8 @@ type ReasonMetric struct {
 	Count  int    `json:"count"`
 }
 
-func (s *Service) Dashboard() Dashboard {
-	payments := s.List()
+func (s *Service) Dashboard(filter ListFilter) Dashboard {
+	payments := s.ListFiltered(filter)
 	dashboard := Dashboard{Abnormal: make([]Payment, 0)}
 	byDate := map[string]*DailyMetric{}
 	byChannel := map[string]*ChannelMetric{}
