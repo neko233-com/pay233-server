@@ -129,8 +129,8 @@ function renderHealth(channels) {
   box.innerHTML = channels.map((c) => `
     <div class="channel-item">
       <div>
-        <strong>${c.display_name || c.name}</strong>
-        <small>${c.name} · ${(c.capabilities || []).slice(0, 3).join(" / ")}</small>
+        <strong>${c.display_name || c.name}${c.env_type ? ` · ${c.env_type}` : ""}</strong>
+        <small>${c.name}${c.env_type ? ` / ${c.env_type}` : ""} · ${(c.capabilities || []).slice(0, 3).join(" / ")}</small>
         <small>检查 ${checkedAt(c.last_checked_at)} · ${c.latency_ms || 0}ms${c.last_error ? ` · ${c.last_error}` : ""}</small>
       </div>
       <span class="status ${statusClass(c.health)}">${c.health}</span>

@@ -136,6 +136,7 @@ type WebhookEvent struct {
 
 type ProviderInfo struct {
 	Name          string     `json:"name"`
+	EnvType       EnvType    `json:"env_type,omitempty"`
 	DisplayName   string     `json:"display_name"`
 	Family        string     `json:"family"`
 	Capabilities  []string   `json:"capabilities"`
@@ -147,7 +148,8 @@ type ProviderInfo struct {
 
 type Provider interface {
 	Info() ProviderInfo
-	CheckHealth(context.Context) ProviderInfo
+	HealthEnvironments() []EnvType
+	CheckHealth(context.Context, EnvType) ProviderInfo
 	CreatePayment(context.Context, ProviderCreateRequest) (ProviderCreateResponse, error)
 	ClosePayment(context.Context, Payment) error
 	ParseWebhook(context.Context, []byte, map[string]string) (WebhookEvent, error)

@@ -80,9 +80,8 @@ func (s *Server) adminStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	body, ok := readRequestBody(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -106,6 +105,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		Path:     "/admin",
 		Expires:  expires,
 		HttpOnly: true,
+		Secure:   secureCookie(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	s.audit(user.Username, user.Role, "admin_login_success", "admin", nil)
@@ -122,6 +122,7 @@ func (s *Server) adminLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/admin",
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
+		Secure:   secureCookie(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -160,6 +161,7 @@ func (s *Server) adminPayments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) adminMarkLost(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var req struct {
 		Reason string `json:"reason"`
 	}
@@ -218,16 +220,18 @@ func (s *Server) adminCheckChannelHealth(w http.ResponseWriter, r *http.Request)
 	defer cancel()
 	before := map[string]string{}
 	for _, info := range s.registry.ChannelInfos() {
-		before[info.Name] = info.Health
+		before[providerInfoTarget(info)] = info.Health
 	}
 	infos := s.registry.CheckAllHealth(ctx)
 	actor, _ := s.currentAdmin(r)
 	s.audit(actor.Username, actor.Role, "channel_health_manual_check", "channels", map[string]string{"count": strconv.Itoa(len(infos))})
 	for _, info := range infos {
-		if info.Health != "ok" || before[info.Name] != info.Health {
-			s.audit(actor.Username, actor.Role, "channel_health_status", info.Name, map[string]string{
-				"health": info.Health,
-				"error":  info.LastError,
+		target := providerInfoTarget(info)
+		if info.Health != "ok" || before[target] != info.Health {
+			s.audit(actor.Username, actor.Role, "channel_health_status", target, map[string]string{
+				"env_type": string(info.EnvType),
+				"health":   info.Health,
+				"error":    info.LastError,
 			})
 		}
 	}
@@ -239,6 +243,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) adminCreateUser(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var req adminstore.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -393,4 +398,15 @@ func listFilterFromRequest(r *http.Request) (payment.ListFilter, error) {
 		return payment.ListFilter{}, err
 	}
 	return payment.ListFilter{EnvType: envType}, nil
+}
+
+func secureCookie(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func providerInfoTarget(info payment.ProviderInfo) string {
+	if info.EnvType == "" {
+		return info.Name
+	}
+	return info.Name + "/" + string(info.EnvType)
 }

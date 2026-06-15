@@ -89,6 +89,8 @@ make verify
 
 Default admin credentials are `root` / `root`. Change them in config before production use.
 
+Signed API requests use `X-Pay233-Timestamp` and `X-Pay233-Signature`. The timestamp must be RFC3339 and is accepted only within `api.signature_max_skew_seconds` seconds of server time, defaulting to 300 seconds. Signed API and webhook bodies are capped at 1 MiB, and admin/static responses include baseline security headers.
+
 ## Admin Roles and Audit Logs
 
 The admin console supports three roles:
@@ -145,6 +147,31 @@ The dashboard shows each channel's latest health, latency, last check time, and 
 Use `test` for sandbox traffic and `release` for formal payment traffic. Missing values default to `test`; `env_type` is accepted as an alias. The order index includes the environment, so the same merchant order number can be tested and then released on the same server without collision.
 
 Webhook payloads also accept `envType` / `env_type`. The admin APIs support `?envType=test`, `?envType=release`, and `?envType=all`; the dashboard UI exposes the same switch.
+
+The same channel can hold separate sandbox and production credentials on one server:
+
+```json
+{
+  "name": "wechat",
+  "provider": "wechat_pay",
+  "enabled": true,
+  "options": {
+    "pay_url_base": "https://pay233.local/wechat/pay"
+  },
+  "environments": {
+    "test": {
+      "credentials": { "merchant_id": "wechat-test-mch", "api_key": "test-key" },
+      "options": { "pay_url_base": "https://test.pay.example/wechat/pay", "health_status": "ok" }
+    },
+    "release": {
+      "credentials": { "merchant_id": "wechat-release-mch", "api_key": "release-key" },
+      "options": { "pay_url_base": "https://pay.example/wechat/pay", "health_status": "ok" }
+    }
+  }
+}
+```
+
+Top-level `credentials` and `options` are shared defaults. Environment blocks override only the keys they define. Channel health checks are also split by environment when `environments` is configured.
 
 ## Merchant Callbacks
 

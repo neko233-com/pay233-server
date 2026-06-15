@@ -7,16 +7,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
+type ProviderEnvConfig struct {
+	Credentials map[string]string
+	Options     map[string]string
+}
+
 type ConfiguredProvider struct {
-	provider   string
-	display    string
-	family     string
-	payURLBase string
-	healthURL  string
-	healthMode string
+	provider      string
+	display       string
+	family        string
+	defaultConfig providerRuntimeConfig
+	envs          map[EnvType]providerRuntimeConfig
+}
+
+type providerRuntimeConfig struct {
+	credentials map[string]string
+	options     map[string]string
+	payURLBase  string
+	healthURL   string
+	healthMode  string
 }
 
 type MockProvider = ConfiguredProvider
@@ -26,18 +39,25 @@ func NewMockProvider(options map[string]string) *MockProvider {
 }
 
 func NewConfiguredProvider(provider string, options map[string]string) *ConfiguredProvider {
+	return NewConfiguredProviderWithEnvironments(provider, nil, options, nil)
+}
+
+func NewConfiguredProviderWithEnvironments(provider string, credentials map[string]string, options map[string]string, envs map[EnvType]ProviderEnvConfig) *ConfiguredProvider {
 	info := providerCatalog(provider)
-	base := options["pay_url_base"]
-	if base == "" {
-		base = "https://pay233.local/" + provider + "/pay"
+	runtimeEnvs := make(map[EnvType]providerRuntimeConfig, len(envs))
+	for env, envConfig := range envs {
+		runtimeEnvs[env] = newProviderRuntimeConfig(
+			provider,
+			mergeStringMaps(credentials, envConfig.Credentials),
+			mergeStringMaps(options, envConfig.Options),
+		)
 	}
 	return &ConfiguredProvider{
-		provider:   provider,
-		display:    info.DisplayName,
-		family:     info.Family,
-		payURLBase: base,
-		healthURL:  options["health_url"],
-		healthMode: options["health_status"],
+		provider:      provider,
+		display:       info.DisplayName,
+		family:        info.Family,
+		defaultConfig: newProviderRuntimeConfig(provider, credentials, options),
+		envs:          runtimeEnvs,
 	}
 }
 
@@ -51,30 +71,55 @@ func (p *ConfiguredProvider) Info() ProviderInfo {
 	}
 }
 
-func (p *ConfiguredProvider) CheckHealth(ctx context.Context) ProviderInfo {
+func (p *ConfiguredProvider) HealthEnvironments() []EnvType {
+	if len(p.envs) == 0 {
+		return []EnvType{""}
+	}
+	envs := make([]EnvType, 0, len(p.envs))
+	for _, env := range []EnvType{EnvTypeTest, EnvTypeRelease} {
+		if _, ok := p.envs[env]; ok {
+			envs = append(envs, env)
+		}
+	}
+	extra := make([]EnvType, 0)
+	for env := range p.envs {
+		if env != EnvTypeTest && env != EnvTypeRelease {
+			extra = append(extra, env)
+		}
+	}
+	sort.Slice(extra, func(i, j int) bool { return extra[i] < extra[j] })
+	envs = append(envs, extra...)
+	return envs
+}
+
+func (p *ConfiguredProvider) CheckHealth(ctx context.Context, env EnvType) ProviderInfo {
 	start := time.Now()
 	info := p.Info()
+	if env != "" {
+		info.EnvType = env
+	}
+	runtime := p.runtimeFor(env)
 	now := start.UTC()
 	info.LastCheckedAt = &now
 	finish := func() ProviderInfo {
 		info.LatencyMS = time.Since(start).Milliseconds()
 		return info
 	}
-	if p.healthMode != "" {
-		switch p.healthMode {
+	if runtime.healthMode != "" {
+		switch runtime.healthMode {
 		case "ok", "degraded", "down":
-			info.Health = p.healthMode
+			info.Health = runtime.healthMode
 		default:
 			info.Health = "down"
 			info.LastError = "invalid health_status option"
 		}
 		return finish()
 	}
-	if p.healthURL == "" {
+	if runtime.healthURL == "" {
 		info.Health = "ok"
 		return finish()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.healthURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runtime.healthURL, nil)
 	if err != nil {
 		info.Health = "down"
 		info.LastError = err.Error()
@@ -102,9 +147,10 @@ func (p *ConfiguredProvider) CheckHealth(ctx context.Context) ProviderInfo {
 
 func (p *ConfiguredProvider) CreatePayment(_ context.Context, req ProviderCreateRequest) (ProviderCreateResponse, error) {
 	trade := p.provider + "_" + randomHex(8)
+	runtime := p.runtimeFor(req.Payment.EnvType)
 	return ProviderCreateResponse{
 		ProviderTrade: trade,
-		PayURL:        fmt.Sprintf("%s/%s", p.payURLBase, trade),
+		PayURL:        fmt.Sprintf("%s/%s", runtime.payURLBase, trade),
 		Status:        StatusPending,
 	}, nil
 }
@@ -172,4 +218,52 @@ func randomHex(n int) string {
 		return "fallback"
 	}
 	return hex.EncodeToString(buf)
+}
+
+func (p *ConfiguredProvider) runtimeFor(env EnvType) providerRuntimeConfig {
+	if env != "" {
+		if runtime, ok := p.envs[env]; ok {
+			return runtime
+		}
+	}
+	return p.defaultConfig
+}
+
+func newProviderRuntimeConfig(provider string, credentials map[string]string, options map[string]string) providerRuntimeConfig {
+	base := options["pay_url_base"]
+	if base == "" {
+		base = "https://pay233.local/" + provider + "/pay"
+	}
+	return providerRuntimeConfig{
+		credentials: cloneStringMap(credentials),
+		options:     cloneStringMap(options),
+		payURLBase:  base,
+		healthURL:   options["health_url"],
+		healthMode:  options["health_status"],
+	}
+}
+
+func mergeStringMaps(base map[string]string, override map[string]string) map[string]string {
+	merged := cloneStringMap(base)
+	if len(override) == 0 {
+		return merged
+	}
+	if merged == nil {
+		merged = make(map[string]string, len(override))
+	}
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }

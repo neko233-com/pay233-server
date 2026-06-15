@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +24,25 @@ func TestCreatePaymentRequiresValidSignature(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
+	}
+}
+
+func TestCreatePaymentRejectsStaleSignature(t *testing.T) {
+	handler := testServer().Routes()
+	body := []byte(`{"envType":"test","merchant_id":"m1","out_trade_no":"stale-1","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+	timestamp := time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader(body))
+	req.Header.Set(headerTimestamp, timestamp)
+	req.Header.Set(headerSignature, signPayload("secret", timestamp, body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "timestamp") {
+		t.Fatalf("expected timestamp error, got %s", rec.Body.String())
 	}
 }
 
@@ -47,6 +67,43 @@ func TestCreatePayment(t *testing.T) {
 	}
 	if got.PayURL == "" {
 		t.Fatal("expected pay_url")
+	}
+}
+
+func TestCreatePaymentUsesEnvironmentChannelConfig(t *testing.T) {
+	handler := testServerWithChannels([]config.ChannelConfig{{
+		Name:     "mock",
+		Provider: "mock",
+		Enabled:  true,
+		Options:  map[string]string{"pay_url_base": "https://default.pay.local"},
+		Environments: map[string]config.ChannelEnvConfig{
+			"test": {
+				Options: map[string]string{"pay_url_base": "https://test.pay.local"},
+			},
+			"release": {
+				Options: map[string]string{"pay_url_base": "https://release.pay.local"},
+			},
+		},
+	}}).Routes()
+
+	for envType, prefix := range map[string]string{
+		"test":    "https://test.pay.local/",
+		"release": "https://release.pay.local/",
+	} {
+		body := []byte(`{"envType":"` + envType + `","merchant_id":"m1","out_trade_no":"same-order","channel":"mock","amount":{"currency":"CNY","amount":100},"subject":"test"}`)
+		req := signedRequest(http.MethodPost, "/v1/payments", body)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("expected 201 for %s, got %d: %s", envType, rec.Code, rec.Body.String())
+		}
+		var got payment.Payment
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(got.PayURL, prefix) {
+			t.Fatalf("expected %s pay url prefix %s, got %s", envType, prefix, got.PayURL)
+		}
 	}
 }
 

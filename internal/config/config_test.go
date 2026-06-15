@@ -19,6 +19,9 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if cfg.HTTP.Addr != ":5500" {
 		t.Fatalf("expected default addr, got %q", cfg.HTTP.Addr)
 	}
+	if cfg.API.SignatureMaxSkewSeconds != 300 {
+		t.Fatalf("expected default signature skew, got %d", cfg.API.SignatureMaxSkewSeconds)
+	}
 	if cfg.Logging.Dir != "logs" {
 		t.Fatalf("expected default log dir, got %q", cfg.Logging.Dir)
 	}
@@ -51,6 +54,22 @@ func TestLoadValidatesChannel(t *testing.T) {
 	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestLoadValidatesChannelEnvironment(t *testing.T) {
+	path := writeConfig(t, `{
+		"channels": [{
+			"name": "mock",
+			"provider": "mock",
+			"enabled": true,
+			"environments": {"sandbox": {"options": {"health_status": "ok"}}}
+		}]
+	}`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected environment validation error")
 	}
 }
 

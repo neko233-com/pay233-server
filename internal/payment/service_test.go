@@ -90,6 +90,30 @@ func TestServiceSeparatesEnvironments(t *testing.T) {
 	}
 }
 
+func TestServiceDashboardFiltersChannelInfoByEnvironment(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("mock", NewConfiguredProviderWithEnvironments("mock", nil, nil, map[EnvType]ProviderEnvConfig{
+		EnvTypeTest:    {Options: map[string]string{"health_status": "ok"}},
+		EnvTypeRelease: {Options: map[string]string{"health_status": "down"}},
+	}))
+	service := NewService(registry, NewMemoryStore())
+
+	allDashboard := service.Dashboard(ListFilter{})
+	if len(allDashboard.ChannelInfo) != 2 {
+		t.Fatalf("expected all channel info rows, got %#v", allDashboard.ChannelInfo)
+	}
+
+	testDashboard := service.Dashboard(ListFilter{EnvType: EnvTypeTest})
+	if len(testDashboard.ChannelInfo) != 1 || testDashboard.ChannelInfo[0].EnvType != EnvTypeTest {
+		t.Fatalf("expected only test channel info, got %#v", testDashboard.ChannelInfo)
+	}
+
+	releaseDashboard := service.Dashboard(ListFilter{EnvType: EnvTypeRelease})
+	if len(releaseDashboard.ChannelInfo) != 1 || releaseDashboard.ChannelInfo[0].EnvType != EnvTypeRelease {
+		t.Fatalf("expected only release channel info, got %#v", releaseDashboard.ChannelInfo)
+	}
+}
+
 func TestServiceRejectsDuplicateOrderInSameEnvironment(t *testing.T) {
 	service := testService()
 	req := CreatePaymentRequest{

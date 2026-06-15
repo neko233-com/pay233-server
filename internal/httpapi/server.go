@@ -37,6 +37,8 @@ type Server struct {
 	paymentLogger *slog.Logger
 }
 
+const maxRequestBodyBytes int64 = 1 << 20
+
 func NewServer(deps Dependencies) *Server {
 	logger := deps.Logger
 	if logger == nil {
@@ -93,7 +95,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /admin/api/users/{username}", s.withRoles(s.adminDeleteUser, adminstore.RoleRoot))
 	mux.HandleFunc("GET /admin/api/audit", s.withAdmin(s.adminAudit))
 	mux.HandleFunc("POST /admin/api/audit/prune", s.withRoles(s.adminPruneAudit, adminstore.RoleRoot))
-	return mux
+	return s.withSecurityHeaders(mux)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -144,9 +146,8 @@ func (s *Server) closePayment(w http.ResponseWriter, r *http.Request, _ []byte) 
 }
 
 func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	body, ok := readRequestBody(w, r)
+	if !ok {
 		return
 	}
 	headers := make(map[string]string, len(r.Header))
@@ -177,17 +178,28 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) withSignedBody(next func(http.ResponseWriter, *http.Request, []byte)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+		body, ok := readRequestBody(w, r)
+		if !ok {
 			return
 		}
-		if !verifySignature(r, s.cfg.API.SigningSecret, body) {
-			writeError(w, http.StatusUnauthorized, errors.New("invalid request signature"))
+		maxSkew := time.Duration(s.cfg.API.SignatureMaxSkewSeconds) * time.Second
+		if err := verifySignature(r, s.cfg.API.SigningSecret, body, maxSkew); err != nil {
+			writeError(w, http.StatusUnauthorized, err)
 			return
 		}
 		next(w, r, body)
 	}
+}
+
+func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := w.Header()
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) writePaymentError(w http.ResponseWriter, err error) {
@@ -213,6 +225,21 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+func readRequestBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	defer r.Body.Close()
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodyBytes))
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, errors.New("request body too large"))
+			return nil, false
+		}
+		writeError(w, http.StatusBadRequest, err)
+		return nil, false
+	}
+	return body, true
 }
 
 func (s *Server) logPayment(event string, p payment.Payment) {

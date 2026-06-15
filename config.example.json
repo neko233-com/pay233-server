@@ -3,7 +3,8 @@
     "addr": ":5500"
   },
   "api": {
-    "signing_secret": "dev-secret"
+    "signing_secret": "dev-secret",
+    "signature_max_skew_seconds": 300
   },
   "admin": {
     "username": "root",
@@ -31,6 +32,26 @@
       "enabled": true,
       "options": {
         "pay_url_base": "https://pay233.local/mock/pay"
+      },
+      "environments": {
+        "test": {
+          "credentials": {
+            "merchant_id": "mock-test-merchant"
+          },
+          "options": {
+            "pay_url_base": "https://pay233.local/mock/test/pay",
+            "health_status": "ok"
+          }
+        },
+        "release": {
+          "credentials": {
+            "merchant_id": "mock-release-merchant"
+          },
+          "options": {
+            "pay_url_base": "https://pay233.local/mock/release/pay",
+            "health_status": "ok"
+          }
+        }
       }
     },
     {

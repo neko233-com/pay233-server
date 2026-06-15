@@ -302,8 +302,21 @@ func (s *Service) Dashboard(filter ListFilter) Dashboard {
 	if len(dashboard.Abnormal) > 50 {
 		dashboard.Abnormal = dashboard.Abnormal[:50]
 	}
-	dashboard.ChannelInfo = s.registry.ChannelInfos()
+	dashboard.ChannelInfo = filterChannelInfos(s.registry.ChannelInfos(), filter.EnvType)
 	return dashboard
+}
+
+func filterChannelInfos(infos []ProviderInfo, envType EnvType) []ProviderInfo {
+	if envType == "" {
+		return infos
+	}
+	filtered := make([]ProviderInfo, 0, len(infos))
+	for _, info := range infos {
+		if info.EnvType == "" || info.EnvType == envType {
+			filtered = append(filtered, info)
+		}
+	}
+	return filtered
 }
 
 func isAbnormal(p Payment) bool {

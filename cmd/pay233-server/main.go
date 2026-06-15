@@ -150,26 +150,28 @@ func startChannelHealthMonitor(ctx context.Context, cfg config.Config, registry 
 	}
 	previous := map[string]string{}
 	for _, info := range registry.ChannelInfos() {
-		previous[info.Name] = info.Health
+		previous[channelHealthKey(info)] = info.Health
 	}
 	check := func() {
 		checkCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		infos := registry.CheckAllHealth(checkCtx)
 		for _, info := range infos {
-			old := previous[info.Name]
-			previous[info.Name] = info.Health
+			key := channelHealthKey(info)
+			old := previous[key]
+			previous[key] = info.Health
 			if info.Health == "ok" && old == info.Health {
 				continue
 			}
-			logger.Warn("channel health check status", "channel", info.Name, "health", info.Health, "previous", old, "error", info.LastError, "latency_ms", info.LatencyMS)
+			logger.Warn("channel health check status", "channel", info.Name, "env_type", info.EnvType, "health", info.Health, "previous", old, "error", info.LastError, "latency_ms", info.LatencyMS)
 			if auditStore != nil {
 				_ = auditStore.Write(admin.AuditEntry{
 					Actor:  "system",
 					Role:   admin.RoleRoot,
 					Action: "channel_health_status",
-					Target: info.Name,
+					Target: key,
 					Details: map[string]string{
+						"env_type": string(info.EnvType),
 						"previous": old,
 						"health":   info.Health,
 						"error":    info.LastError,
@@ -189,4 +191,11 @@ func startChannelHealthMonitor(ctx context.Context, cfg config.Config, registry 
 			check()
 		}
 	}
+}
+
+func channelHealthKey(info payment.ProviderInfo) string {
+	if info.EnvType == "" {
+		return info.Name
+	}
+	return info.Name + "/" + string(info.EnvType)
 }

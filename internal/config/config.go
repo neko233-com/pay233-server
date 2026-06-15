@@ -22,7 +22,8 @@ type HTTPConfig struct {
 }
 
 type APIConfig struct {
-	SigningSecret string `json:"signing_secret"`
+	SigningSecret           string `json:"signing_secret"`
+	SignatureMaxSkewSeconds int    `json:"signature_max_skew_seconds"`
 }
 
 type AdminConfig struct {
@@ -49,9 +50,15 @@ type MonitorConfig struct {
 }
 
 type ChannelConfig struct {
-	Name        string            `json:"name"`
-	Provider    string            `json:"provider"`
-	Enabled     bool              `json:"enabled"`
+	Name         string                      `json:"name"`
+	Provider     string                      `json:"provider"`
+	Enabled      bool                        `json:"enabled"`
+	Credentials  map[string]string           `json:"credentials,omitempty"`
+	Options      map[string]string           `json:"options,omitempty"`
+	Environments map[string]ChannelEnvConfig `json:"environments,omitempty"`
+}
+
+type ChannelEnvConfig struct {
 	Credentials map[string]string `json:"credentials,omitempty"`
 	Options     map[string]string `json:"options,omitempty"`
 }
@@ -70,6 +77,9 @@ func Load(path string) (Config, error) {
 
 	if cfg.HTTP.Addr == "" {
 		cfg.HTTP.Addr = ":5500"
+	}
+	if cfg.API.SignatureMaxSkewSeconds <= 0 {
+		cfg.API.SignatureMaxSkewSeconds = 300
 	}
 	if cfg.Admin.Username == "" {
 		cfg.Admin.Username = "root"
@@ -110,6 +120,11 @@ func Load(path string) (Config, error) {
 		}
 		if channel.Provider == "" {
 			return Config{}, fmt.Errorf("channels[%d].provider is required", i)
+		}
+		for env := range channel.Environments {
+			if env != "test" && env != "release" {
+				return Config{}, fmt.Errorf("channels[%d].environments[%q] must be test or release", i, env)
+			}
 		}
 	}
 
